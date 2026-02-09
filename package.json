@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run copy-templates",
+    "copy-templates": "cp -r src/plugins/app/nextjs/templates dist/plugins/app/nextjs/ 2>/dev/null || true && cp -r src/plugins/app/api/templates dist/plugins/app/api/ 2>/dev/null || true",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "lint": "eslint src --ext ts",

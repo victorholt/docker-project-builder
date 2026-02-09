@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   try {
     const body: TestRequest = await request.json()
     const projectName = body.projectName || 'test-project'
-    const services = body.services || ['nextjs', 'expressjs', 'postgres']
+    const services = body.services || ['nextjs', 'api', 'postgres']
 
     addLog('Starting test project generation...')
 
@@ -38,23 +38,35 @@ export async function POST(request: Request) {
       // Project doesn't exist, which is fine
     }
 
-    // Generate test project
+    // Generate test project using the generate API
     addLog('Generating test project with services: ' + services.join(', '))
-    const serviceArgs = services.map(s => `-s ${s}`).join(' ')
-    const generateCommand = `${dpbPath} create -n ${projectName} -d ${projectName}.local -e local ${serviceArgs} -o ${outputPath} -y`
 
-    addLog(`Executing: ${generateCommand}`)
-    const { stdout: genStdout, stderr: genStderr } = await execAsync(generateCommand, {
-      maxBuffer: 10 * 1024 * 1024,
+    // Import the generate handler
+    const { POST: generateHandler } = await import('../generate/route')
+
+    const generateRequest = new Request('http://localhost/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectName,
+        domain: `${projectName}.local`,
+        services,
+        environments: ['local'],
+      }),
     })
 
-    addLog('Project generation output:')
-    genStdout.split('\n').forEach(line => line && addLog(`  ${line}`))
+    const generateResponse = await generateHandler(generateRequest)
+    const generateData = await generateResponse.json()
 
-    if (genStderr && !genStderr.includes('warning')) {
-      addLog('Generation warnings/errors:')
-      genStderr.split('\n').forEach(line => line && addLog(`  ${line}`))
+    if (!generateResponse.ok) {
+      throw new Error(generateData.error || 'Failed to generate project')
     }
+
+    addLog('Project generation output:')
+    if (generateData.output) {
+      generateData.output.split('\n').forEach((line: string) => line && addLog(`  ${line}`))
+    }
+    addLog(`✓ Project generated at ${generateData.outputPath}`)
 
     // Build and start containers
     addLog('\nBuilding and starting Docker containers...')
@@ -85,14 +97,17 @@ export async function POST(request: Request) {
 
     // Determine which services were included and test them
     const testEndpoints: Array<{ name: string; url: string }> = []
+    const ports = generateData.ports || {}
 
     if (services.includes('nextjs')) {
-      testEndpoints.push({ name: 'Next.js App', url: 'http://localhost:3000' })
+      const nextjsPort = ports.nextjs || 3000
+      testEndpoints.push({ name: 'Next.js App', url: `http://localhost:${nextjsPort}` })
     }
 
-    if (services.includes('expressjs')) {
-      testEndpoints.push({ name: 'Express API Health', url: 'http://localhost:4000/health' })
-      testEndpoints.push({ name: 'Express API Hello', url: 'http://localhost:4000/api/hello' })
+    if (services.includes('api')) {
+      const apiPort = ports.api || 4000
+      testEndpoints.push({ name: 'Express API Health', url: `http://localhost:${apiPort}/health` })
+      testEndpoints.push({ name: 'Express API Hello', url: `http://localhost:${apiPort}/api/hello` })
     }
 
     for (const endpoint of testEndpoints) {

@@ -24,21 +24,28 @@ export async function GET() {
     let currentCategory = ''
 
     for (const line of lines) {
-      // Match category headers (e.g., "App Frameworks:")
-      const categoryMatch = line.match(/^([A-Z][^:]+):/)
-      if (categoryMatch) {
-        currentCategory = categoryMatch[1].toLowerCase().replace(/\s+/g, '-')
+      // Skip empty lines and headers
+      if (!line.trim() || line.includes('Available Services')) {
+        continue
+      }
+
+      // Match category headers (e.g., "📱 Application Frameworks" or "🗄️  Databases")
+      const categoryMatch = line.match(/^[^\w\s]*\s*([A-Z][^$]+)$/)
+      if (categoryMatch && !line.includes('  ')) {
+        currentCategory = categoryMatch[1].trim().toLowerCase().replace(/\s+/g, '-')
         services[currentCategory] = []
         continue
       }
 
-      // Match service lines (e.g., "  - nextjs: Next.js framework")
-      const serviceMatch = line.match(/^\s+-\s+(\S+):\s+(.+)$/)
-      if (serviceMatch && currentCategory) {
+      // Match service lines (e.g., "  api             Express.js API - 20-alpine")
+      const serviceMatch = line.match(/^\s+(\S+)\s+(.+?)(?:\s+-\s+\S+)?$/)
+      if (serviceMatch && currentCategory && !line.includes('Also:')) {
+        const name = serviceMatch[1]
+        const description = serviceMatch[2].replace(/\s+-\s+\S+$/, '').trim()
         services[currentCategory].push({
-          name: serviceMatch[1],
+          name,
           category: currentCategory,
-          description: serviceMatch[2],
+          description,
         })
       }
     }

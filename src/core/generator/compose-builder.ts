@@ -41,7 +41,7 @@ export class ComposeBuilder {
     config: ProjectConfig,
     plugins: IServicePlugin[]
   ): Promise<void> {
-    const services: Record<string, ComposeServiceBlock> = {};
+    const services: Record<string, Omit<ComposeServiceBlock, 'serviceName'>> = {};
     const volumes: Record<string, unknown> = {};
     const networks: Record<string, unknown> = {};
 
@@ -49,7 +49,8 @@ export class ComposeBuilder {
     for (const plugin of plugins) {
       const serviceBlock = plugin.getComposeService(config);
       if (serviceBlock) {
-        services[serviceBlock.serviceName] = serviceBlock;
+        const { serviceName, ...serviceDefinition } = serviceBlock;
+        services[serviceName] = serviceDefinition;
       }
 
       // Collect volumes
@@ -73,6 +74,7 @@ export class ComposeBuilder {
 
     // Build compose object
     const composeContent = {
+      name: config.projectName, // Docker Desktop project name
       version: '3.9',
       services,
       ...(Object.keys(volumes).length > 0 && { volumes }),
@@ -95,13 +97,14 @@ export class ComposeBuilder {
     config: ProjectConfig,
     plugins: IServicePlugin[]
   ): Promise<void> {
-    const services: Record<string, ComposeServiceBlock> = {};
+    const services: Record<string, Omit<ComposeServiceBlock, 'serviceName'>> = {};
 
     // Collect override blocks from all plugins
     for (const plugin of plugins) {
       const overrideBlock = plugin.getComposeOverride(config);
       if (overrideBlock) {
-        services[overrideBlock.serviceName] = overrideBlock;
+        const { serviceName, ...serviceDefinition } = overrideBlock;
+        services[serviceName] = serviceDefinition;
       }
     }
 
@@ -132,13 +135,14 @@ export class ComposeBuilder {
     config: ProjectConfig,
     plugins: IServicePlugin[]
   ): Promise<void> {
-    const services: Record<string, ComposeServiceBlock> = {};
+    const services: Record<string, Omit<ComposeServiceBlock, 'serviceName'>> = {};
 
     // Collect prod blocks from all plugins
     for (const plugin of plugins) {
       const prodBlock = plugin.getComposeProd(config);
       if (prodBlock) {
-        services[prodBlock.serviceName] = prodBlock;
+        const { serviceName, ...serviceDefinition } = prodBlock;
+        services[serviceName] = serviceDefinition;
       }
     }
 

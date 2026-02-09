@@ -8,6 +8,7 @@
 import { Command } from 'commander';
 import { createCommand } from './cli/commands/create.js';
 import { listServicesCommand } from './cli/commands/list-services.js';
+import { webuiCommand } from './cli/commands/webui.js';
 
 const program = new Command();
 
@@ -19,6 +20,7 @@ program
 // Add commands
 program.addCommand(createCommand);
 program.addCommand(listServicesCommand);
+program.addCommand(webuiCommand);
 
 // Parse arguments
 program.parse();

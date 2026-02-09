@@ -41,6 +41,9 @@ export class ProjectGenerator {
    */
   async generate(config: ProjectConfig, plugins: IServicePlugin[]): Promise<void> {
     console.log('🚀 Generating Docker project...\n');
+    console.log(`📦 Received ${plugins.length} plugins:`);
+    plugins.forEach(p => console.log(`  - ${p.name} (${p.category})`));
+    console.log('');
 
     // Step 1: Create folder structure
     console.log('📁 Creating folder structure...');

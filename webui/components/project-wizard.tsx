@@ -31,7 +31,21 @@ export function ProjectWizard({ onProjectCreated }: ProjectWizardProps) {
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [environments, setEnvironments] = useState<string[]>(['local'])
   const [isGenerating, setIsGenerating] = useState(false)
+  const [useDefaultPorts, setUseDefaultPorts] = useState(true)
+  const [servicePorts, setServicePorts] = useState<Record<string, number>>({})
   const { toast } = useToast()
+
+  // Default ports for each service
+  const defaultPorts: Record<string, number> = {
+    nextjs: 3000,
+    api: 4000,
+    postgres: 5432,
+    mysql: 3306,
+    redis: 6379,
+    valkey: 6380,
+    mailhog: 8025,
+    mailpit: 8025,
+  }
 
   // Load available services on mount
   useEffect(() => {
@@ -47,12 +61,43 @@ export function ProjectWizard({ onProjectCreated }: ProjectWizardProps) {
       })
   }, [toast])
 
-  const handleServiceToggle = (serviceName: string) => {
-    setSelectedServices((prev) =>
-      prev.includes(serviceName)
-        ? prev.filter((s) => s !== serviceName)
-        : [...prev, serviceName]
-    )
+  const handleServiceToggle = (serviceName: string, isEnabled: boolean) => {
+    if (isEnabled) {
+      setSelectedServices((prev) => [...prev, serviceName])
+      // Set default port when service is enabled
+      if (useDefaultPorts && defaultPorts[serviceName]) {
+        setServicePorts((prev) => ({ ...prev, [serviceName]: defaultPorts[serviceName] }))
+      }
+    } else {
+      setSelectedServices((prev) => prev.filter((s) => s !== serviceName))
+      // Remove port when service is disabled
+      setServicePorts((prev) => {
+        const newPorts = { ...prev }
+        delete newPorts[serviceName]
+        return newPorts
+      })
+    }
+  }
+
+  const handlePortChange = (serviceName: string, port: string) => {
+    const portNum = parseInt(port)
+    if (!isNaN(portNum) && portNum >= 1 && portNum <= 65535) {
+      setServicePorts((prev) => ({ ...prev, [serviceName]: portNum }))
+    }
+  }
+
+  const handleUseDefaultPortsChange = (checked: boolean) => {
+    setUseDefaultPorts(checked)
+    if (checked) {
+      // Fill in default ports for all selected services
+      const newPorts: Record<string, number> = {}
+      selectedServices.forEach((service) => {
+        if (defaultPorts[service]) {
+          newPorts[service] = defaultPorts[service]
+        }
+      })
+      setServicePorts(newPorts)
+    }
   }
 
   const handleEnvironmentToggle = (env: string) => {
@@ -85,7 +130,7 @@ export function ProjectWizard({ onProjectCreated }: ProjectWizardProps) {
     setIsGenerating(true)
 
     try {
-      const response = await fetch('/api/generate', {
+      const response = await fetch('/api/generate-download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -93,18 +138,31 @@ export function ProjectWizard({ onProjectCreated }: ProjectWizardProps) {
           domain: domain || `${projectName}.local`,
           services: selectedServices,
           environments,
+          ports: servicePorts,
         }),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
+        const data = await response.json()
         throw new Error(data.error || 'Failed to generate project')
       }
 
+      // Get the zip file as a blob
+      const blob = await response.blob()
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${projectName}.zip`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
       toast({
-        title: 'Project Generated!',
-        description: `${projectName} has been created successfully at ${data.outputPath}`,
+        title: 'Project Downloaded!',
+        description: `${projectName}.zip is ready. Extract it and run ./dpb-${projectName} to get started.`,
       })
 
       if (onProjectCreated) {
@@ -185,41 +243,77 @@ export function ProjectWizard({ onProjectCreated }: ProjectWizardProps) {
 
         <Separator />
 
-        {/* Services by Category */}
+        {/* Services & Ports */}
         <div className="space-y-4">
-          <Label>Services *</Label>
+          <div className="flex items-center justify-between">
+            <Label>Services & Ports *</Label>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="use-default-ports"
+                checked={useDefaultPorts}
+                onCheckedChange={(checked) => handleUseDefaultPortsChange(checked as boolean)}
+              />
+              <label
+                htmlFor="use-default-ports"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Use default ports
+              </label>
+            </div>
+          </div>
+
           {Object.keys(availableServices).length === 0 ? (
             <p className="text-sm text-muted-foreground">Loading services...</p>
           ) : (
             <div className="space-y-6">
               {Object.entries(availableServices).map(([category, services]) => (
                 <div key={category} className="space-y-3">
-                  <h4 className="text-sm font-semibold capitalize">{category}</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    {services.map((service) => (
-                      <div
-                        key={service.name}
-                        className={`flex items-start space-x-2 p-3 rounded-md border cursor-pointer hover:bg-accent transition-colors ${
-                          selectedServices.includes(service.name) ? 'border-primary bg-accent' : ''
-                        }`}
-                        onClick={() => handleServiceToggle(service.name)}
-                      >
-                        <Checkbox
-                          id={service.name}
-                          checked={selectedServices.includes(service.name)}
-                          onCheckedChange={() => handleServiceToggle(service.name)}
-                        />
-                        <div className="space-y-1">
-                          <label
-                            htmlFor={service.name}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                          >
-                            {service.name}
-                          </label>
-                          <p className="text-xs text-muted-foreground">{service.description}</p>
+                  <h4 className="text-sm font-semibold capitalize text-muted-foreground">{category}</h4>
+                  <div className="space-y-2">
+                    {services.map((service) => {
+                      const isSelected = selectedServices.includes(service.name)
+                      const port = servicePorts[service.name] || defaultPorts[service.name] || ''
+
+                      return (
+                        <div
+                          key={service.name}
+                          className={`flex items-center gap-4 p-3 rounded-md border transition-colors ${
+                            isSelected ? 'border-primary bg-accent' : 'border-border'
+                          }`}
+                        >
+                          <Checkbox
+                            id={service.name}
+                            checked={isSelected}
+                            onCheckedChange={(checked) => handleServiceToggle(service.name, checked as boolean)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <label
+                              htmlFor={service.name}
+                              className="text-sm font-medium leading-none cursor-pointer block"
+                            >
+                              {service.name}
+                            </label>
+                            <p className="text-xs text-muted-foreground mt-1">{service.description}</p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Label htmlFor={`port-${service.name}`} className="text-xs text-muted-foreground">
+                              Port:
+                            </Label>
+                            <Input
+                              id={`port-${service.name}`}
+                              type="number"
+                              min="1"
+                              max="65535"
+                              value={isSelected ? port : ''}
+                              onChange={(e) => handlePortChange(service.name, e.target.value)}
+                              disabled={!isSelected || useDefaultPorts}
+                              placeholder={defaultPorts[service.name]?.toString() || 'Port'}
+                              className="w-24 h-8 text-sm"
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               ))}

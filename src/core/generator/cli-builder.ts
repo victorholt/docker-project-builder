@@ -154,7 +154,12 @@ error() {
 
 # Docker Compose wrapper
 dc() {
-    docker compose -f "\${PROJECT_ROOT}/docker/compose/docker-compose.yml" "$@"
+    # Load base compose and override if it exists
+    local compose_files="-f \${PROJECT_ROOT}/docker/compose/docker-compose.yml"
+    if [ -f "\${PROJECT_ROOT}/docker/compose/docker-compose.override.yml" ]; then
+        compose_files="$compose_files -f \${PROJECT_ROOT}/docker/compose/docker-compose.override.yml"
+    fi
+    docker compose $compose_files "$@"
 }
 
 # Check if docker is running

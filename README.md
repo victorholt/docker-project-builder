@@ -129,6 +129,17 @@ List all available service plugins.
 dpb list
 ```
 
+### dpb webui
+Start the Web UI development server. Automatically installs dependencies if needed.
+
+```bash
+dpb webui
+```
+
+Options:
+- `-p, --port <port>` - Port to run on (default: 3000)
+- `--install-only` - Only install dependencies, don't start server
+
 ### dpb --help
 Show help information.
 

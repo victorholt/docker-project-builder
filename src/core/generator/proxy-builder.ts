@@ -68,9 +68,9 @@ export class ProxyBuilder {
       `    ServerName ${config.domain}`,
       `    ServerAdmin admin@${config.domain}`,
       '',
-      '    # Error and access logs',
-      '    ErrorLog /var/log/apache2/error.log',
-      '    CustomLog /var/log/apache2/access.log combined',
+      '    # Error and access logs (Docker-friendly: stdout/stderr)',
+      '    ErrorLog /proc/self/fd/2',
+      '    CustomLog /proc/self/fd/1 combined',
       '',
     ];
 
@@ -78,8 +78,10 @@ export class ProxyBuilder {
     for (const route of routes) {
       if (route.path) {
         lines.push(`    # ${route.serviceName}`);
-        lines.push(`    ProxyPass ${route.path} http://${route.serviceName}:${route.port}/`);
-        lines.push(`    ProxyPassReverse ${route.path} http://${route.serviceName}:${route.port}/`);
+        // Add trailing slash to path (except root) to strip the path prefix
+        const proxyPath = route.path === '/' ? route.path : `${route.path}/`;
+        lines.push(`    ProxyPass ${proxyPath} http://${route.serviceName}:${route.port}/`);
+        lines.push(`    ProxyPassReverse ${proxyPath} http://${route.serviceName}:${route.port}/`);
         lines.push('');
       }
     }
@@ -112,9 +114,9 @@ export class ProxyBuilder {
         lines.push(`    ServerName ${serverName}`);
         lines.push(`    ServerAdmin admin@${config.domain}`);
         lines.push('');
-        lines.push('    # Error and access logs');
-        lines.push(`    ErrorLog /var/log/apache2/${route.subdomain}-error.log`);
-        lines.push(`    CustomLog /var/log/apache2/${route.subdomain}-access.log combined`);
+        lines.push('    # Error and access logs (Docker-friendly: stdout/stderr)');
+        lines.push('    ErrorLog /proc/self/fd/2');
+        lines.push('    CustomLog /proc/self/fd/1 combined');
         lines.push('');
         lines.push(`    # Proxy to ${route.serviceName}`);
         lines.push(`    ProxyPass / http://${route.serviceName}:${route.port}/`);

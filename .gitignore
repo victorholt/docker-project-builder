@@ -42,6 +42,7 @@ test-cli-output/
 *.log
 *.tmp
 .temp/
+.tmp/
 
 # OS
 Thumbs.db

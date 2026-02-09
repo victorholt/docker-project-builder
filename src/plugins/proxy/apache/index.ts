@@ -32,8 +32,8 @@ export class ApacheProxyPlugin implements IServicePlugin {
     return {
       serviceName: 'proxy',
       build: {
-        context: './docker/proxy',
-        dockerfile: 'Dockerfile',
+        context: '../..',
+        dockerfile: 'docker/proxy/Dockerfile',
       },
       container_name: `\${CONTAINER_PREFIX}-proxy`,
       ports: [
@@ -41,9 +41,9 @@ export class ApacheProxyPlugin implements IServicePlugin {
         '\${PROXY_SSL_PORT}:443',
       ],
       volumes: [
-        './docker/proxy/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro',
-        './docker/proxy/httpd-vhosts.conf:/usr/local/apache2/conf/vhosts/httpd-vhosts.conf:ro',
-        './docker/ssl:/usr/local/apache2/conf/ssl:ro',
+        '../../docker/proxy/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro',
+        '../../docker/proxy/httpd-vhosts.conf:/usr/local/apache2/conf/vhosts/httpd-vhosts.conf:ro',
+        '../../docker/ssl:/usr/local/apache2/conf/ssl:ro',
       ],
       networks: ['app-network'],
       depends_on: this.getAppServiceDependencies(config),
@@ -53,13 +53,9 @@ export class ApacheProxyPlugin implements IServicePlugin {
   }
 
   getComposeOverride(config: ProjectConfig): ComposeServiceBlock | null {
-    // In dev, use dev vhosts configuration
-    return {
-      serviceName: 'proxy',
-      volumes: [
-        './docker/proxy/httpd-vhosts-dev.conf:/usr/local/apache2/conf/vhosts/httpd-vhosts.conf:ro',
-      ],
-    };
+    // In dev, use base path-based routing (works with localhost)
+    // No override needed - base config already has path-based routing
+    return null;
   }
 
   getComposeProd(config: ProjectConfig): ComposeServiceBlock | null {
@@ -67,7 +63,7 @@ export class ApacheProxyPlugin implements IServicePlugin {
     return {
       serviceName: 'proxy',
       volumes: [
-        './docker/proxy/httpd-vhosts-prod.conf:/usr/local/apache2/conf/vhosts/httpd-vhosts.conf:ro',
+        '../../docker/proxy/httpd-vhosts-prod.conf:/usr/local/apache2/conf/vhosts/httpd-vhosts.conf:ro',
       ],
     };
   }
@@ -87,7 +83,7 @@ RUN mkdir -p /usr/local/apache2/conf/vhosts && \\
     mkdir -p /usr/local/apache2/conf/ssl
 
 # Copy entrypoint script
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/scripts/proxy-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 80 443

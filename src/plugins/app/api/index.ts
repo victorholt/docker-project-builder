@@ -15,6 +15,7 @@ import type {
 
 /**
  * Express.js API plugin
+ * Note: name is 'api' (not 'expressjs') to match the generated folder apps/api/
  */
 export class ExpressjsPlugin implements IServicePlugin {
   name = 'api';
@@ -31,13 +32,13 @@ export class ExpressjsPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       build: {
-        context: './docker/images',
-        dockerfile: 'api.Dockerfile',
+        context: '../..',
+        dockerfile: 'docker/images/api.Dockerfile',
         target: 'development',
       },
       container_name: `\${CONTAINER_PREFIX}-api`,
       volumes: [
-        `./apps/api:/app`,
+        `../../apps/api:/app`,
         `/app/node_modules`,
       ],
       environment: {
@@ -53,7 +54,7 @@ export class ExpressjsPlugin implements IServicePlugin {
   getComposeOverride(config: ProjectConfig): ComposeServiceBlock | null {
     return {
       serviceName: this.name,
-      ports: ['4000:4000'],
+      ports: ['${API_EXTERNAL_PORT}:4000'],
       command: 'npm run dev',
     };
   }
@@ -62,8 +63,8 @@ export class ExpressjsPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       build: {
-        context: './docker/images',
-        dockerfile: 'api.Dockerfile',
+        context: '../..',
+        dockerfile: 'docker/images/api.Dockerfile',
         target: 'production',
       },
       environment: {
@@ -122,8 +123,10 @@ exec "$@"
   }
 
   getEnvVars(config: ProjectConfig, env: Environment): EnvVarBlock {
+    const externalPort = (config as any).ports?.[this.name] || 4000;
     return {
       API_PORT: 4000,
+      API_EXTERNAL_PORT: externalPort,
       API_HOST: '0.0.0.0',
     };
   }

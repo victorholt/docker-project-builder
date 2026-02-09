@@ -23,7 +23,7 @@ interface TestSummary {
   failed: number
 }
 
-const DEFAULT_SERVICES = ['nextjs', 'expressjs', 'postgres']
+const DEFAULT_SERVICES = ['nextjs', 'api', 'postgres']
 
 export function TestProject() {
   const [projectName, setProjectName] = useState('test-project')
@@ -36,7 +36,7 @@ export function TestProject() {
 
   const availableServices = [
     { name: 'nextjs', label: 'Next.js', description: 'Frontend application' },
-    { name: 'expressjs', label: 'Express.js', description: 'API server' },
+    { name: 'api', label: 'Express.js', description: 'API server' },
     { name: 'postgres', label: 'PostgreSQL', description: 'Database' },
     { name: 'redis', label: 'Redis', description: 'Cache' },
   ]

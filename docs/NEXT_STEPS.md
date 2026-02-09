@@ -1,275 +1,208 @@
-# Next Steps - Quick Start Guide
+# Docker Project Builder - Quick Start for New Sessions
 
-## 🚀 Resume Development Here
-
-### What's Already Done
-- ✅ Core architecture (interfaces, models, services, generators)
-- ✅ 4 working plugins (Apache, Next.js, Express, PostgreSQL)
-- ✅ TypeScript builds successfully (`npm run build`)
-- ✅ All generators ready to use
-
-### What's Needed to Run
-The project can't be used yet because there's **no CLI entry point**. You need to implement the CLI commands.
+**Last Updated:** 2026-02-09
+**Current Status:** ✅ MVP Complete + Web UI Ready
 
 ---
 
-## 📋 Immediate Tasks (Priority Order)
+## 🎯 Where We Are
 
-### Task 1: Create CLI Entry Point (HIGHEST PRIORITY)
-**File:** `src/index.ts`
+The Docker Project Builder is **90% complete** and **fully functional**:
 
-```typescript
-#!/usr/bin/env node
-import { Command } from 'commander';
-import { createCommand } from './cli/commands/create.js';
-import { listServicesCommand } from './cli/commands/list-services.js';
+✅ **Core CLI Tool** - Generate projects with `./dpb create`
+✅ **9 Service Plugins** - Next.js, Express, PostgreSQL, MySQL, Redis, Valkey, MailHog, Mailpit, Apache
+✅ **Starter Templates** - Next.js 16 + React 19 + shadcn/ui, Express.js with TypeScript
+✅ **Generated Bash CLIs** - Each project gets a `./myapp` CLI tool
+✅ **Web UI** - Visual project creator with Docker viewer and test feature
 
-const program = new Command();
+⏳ **Automated Tests** - Not yet implemented (manual testing works)
+⏳ **Documentation** - 3/6 docs complete
 
-program
-  .name('dpb')
-  .description('Docker Project Builder - Generate production-ready Docker projects')
-  .version('0.1.0');
+---
 
-program.addCommand(createCommand);
-program.addCommand(listServicesCommand);
+## 🚀 Quick Start (For You)
 
-program.parse();
+### 1. Test the CLI
+
+```bash
+# Build the project
+npm run build
+
+# List available services
+./dpb list
+
+# Create a project interactively
+./dpb create
+
+# Or start the Web UI
+./dpb webui
 ```
 
-### Task 2: Create Prompts Module
-**File:** `src/cli/prompts.ts`
+### 2. Test a Generated Project
 
-Implement interactive prompts using inquirer:
-- Project name, domain, container prefix
-- Service selection (checkboxes by category)
-- Version selection per service
-- Environment selection
-- Proxy configuration
-- Output path
+```bash
+cd myapp-output
 
-**Returns:** `ProjectConfig` object
+# Start all services
+./myapp up
 
-### Task 3: Create `create` Command
-**File:** `src/cli/commands/create.ts`
+# View logs
+./myapp logs
 
-```typescript
-import { Command } from 'commander';
-import { collectProjectConfig } from '../prompts.js';
-import { ProjectGenerator } from '../../core/generator/project-generator.js';
-import { PluginRegistry } from '../../core/services/plugin-registry.js';
-import { FileWriter } from '../../core/services/file-writer.js';
-import { TemplateRenderer } from '../../core/services/template-renderer.js';
+# Check status
+./myapp status
 
-export const createCommand = new Command('create')
-  .description('Create a new Docker project')
-  .action(async () => {
-    try {
-      // 1. Collect config via prompts
-      const config = await collectProjectConfig();
-
-      // 2. Discover plugins
-      const registry = new PluginRegistry();
-      await registry.discoverPlugins();
-
-      // 3. Get selected plugins
-      const plugins = config.services.map(s => registry.getPlugin(s.name)!);
-
-      // 4. Initialize services
-      const fileWriter = new FileWriter();
-      const templateRenderer = new TemplateRenderer();
-
-      // 5. Generate project
-      const generator = new ProjectGenerator(fileWriter, templateRenderer);
-      await generator.generate(config, plugins);
-
-      console.log('\n✅ Project created successfully!');
-    } catch (error) {
-      console.error('❌ Error:', error);
-      process.exit(1);
-    }
-  });
+# Stop services
+./myapp down
 ```
 
-### Task 4: Create `list` Command
-**File:** `src/cli/commands/list-services.ts`
+### 3. Test the Web UI
 
-Simple command to list available services by category.
+```bash
+# Start Web UI (auto-installs dependencies)
+./dpb webui
 
-### Task 5: Build and Test
+# Or manually
+cd webui
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) and:
+- Create a project visually
+- View Docker logs and container status
+- Run the test project feature
+
+---
+
+## 📁 Key Files to Review
+
+### For Understanding Current State
+1. **[docs/PROGRESS.md](PROGRESS.md)** - Complete status, architecture, what works
+2. **[MEMORY.md](../.claude/projects/-Users-victorh-Documents-projects-gitp-docker-project-builder/memory/MEMORY.md)** - Auto memory with critical decisions
+3. **[README.md](../README.md)** - User-facing documentation
+
+### For Implementation Details
+4. **[src/core/interfaces/service-plugin.ts](../src/core/interfaces/service-plugin.ts)** - Plugin contract (13 methods)
+5. **[src/core/generator/project-generator.ts](../src/core/generator/project-generator.ts)** - Main orchestrator
+6. **[src/plugins/app/nextjs/index.ts](../src/plugins/app/nextjs/index.ts)** - Example plugin
+
+### For Web UI
+7. **[webui/README.md](../webui/README.md)** - Web UI documentation
+8. **[webui/app/api/generate/route.ts](../webui/app/api/generate/route.ts)** - Generation endpoint
+
+---
+
+## 💡 How Things Work
+
+### Architecture: CLI is Core, Web UI is Wrapper
+
+```
+User → dpb CLI → Generates → ./myapp (Bash CLI)
+        ↓                          ↓
+    Web UI ──────────────→ Executes ./myapp commands
+```
+
+**Key:** Generated bash CLI is the single source of truth. Web UI executes these commands.
+
+### Plugin System
+
+Each plugin implements `IServicePlugin` (13 methods). See `src/plugins/app/nextjs/index.ts` for example.
+
+### Generation Flow
+
+```
+User Input → ProjectConfig → PluginRegistry → ProjectGenerator
+  ↓
+  ├─ StructureBuilder → Create folders
+  ├─ TemplatesBuilder → Copy starter code  
+  ├─ ComposeBuilder → docker-compose files
+  ├─ DockerfileBuilder → Dockerfiles
+  ├─ EnvBuilder → .env files
+  ├─ ProxyBuilder → Apache configs
+  └─ CLIBuilder → bash CLI
+```
+
+---
+
+## 📝 What's Left to Build
+
+### Priority 1: Automated Tests (4-6 hours)
+- Unit tests for builders
+- Plugin tests
+- Integration test
+- E2E test
+
+### Priority 2: Documentation (2-3 hours)
+- `docs/getting-started.md`
+- `docs/adding-plugins.md`
+- `docs/generated-output.md`
+
+### Priority 3: Web UI Enhancements (6-8 hours)
+- Real-time log streaming
+- Container monitoring
+- Visual compose editor
+
+---
+
+## 🐛 Known Issues
+
+**Plugin Discovery:** Loads from `dist/` (compiled JS). Run `npm run build` before testing.
+
+**Type Safety:** `noUnusedParameters: false` in tsconfig, Handlebars helpers use `(...args: unknown[])`
+
+**Web UI:** Logs on-demand (not streaming), test feature takes 2-3 mins
+
+---
+
+## 💬 Tips for Continuing
+
+### Starting a New Session
+1. Read [PROGRESS.md](PROGRESS.md) first
+2. Check [MEMORY.md](../.claude/projects/-Users-victorh-Documents-projects-gitp-docker-project-builder/memory/MEMORY.md)
+3. Run `./dpb list` to verify
+4. Pick a task from above
+
+### Making Changes
+1. `npm run build` after changes
+2. Test with `./dpb create` or `./dpb webui`
+3. Check generated output
+4. Verify Docker: `./myapp up`, `./myapp logs`
+
+### Debugging
+1. Check build: `npm run build`
+2. Test CLI: `./dpb create`
+3. For Web UI: Browser console + API logs
+4. For Docker: `docker compose config` in output dir
+5. Use Web UI "Copy Logs" feature
+
+---
+
+## 📞 Quick Reference
+
 ```bash
 # Build
 npm run build
 
-# Test (should show help)
-node dist/index.js --help
+# CLI
+./dpb --help
+./dpb create      # Interactive project generation
+./dpb list        # Show available services
+./dpb webui       # Start Web UI
 
-# Test create command
-node dist/index.js create
+# Generated Project
+cd myapp-output
+./myapp up        # Start containers
+./myapp down      # Stop containers
+./myapp logs      # View logs
+./myapp status    # Container status
 
-# Or use the bin alias
-npm link
-dpb create
+# Web UI
+./dpb webui       # Auto-installs deps
+# or
+cd webui && npm run dev
 ```
 
 ---
 
-## 🧪 Testing Current Build (Task C)
-
-### Option 1: Unit Test a Generator
-Create `test.ts` in project root:
-
-```typescript
-import { StructureBuilder } from './src/core/generator/structure-builder.js';
-import { FileWriter } from './src/core/services/file-writer.js';
-import { ProjectConfig } from './src/core/models/project-config.js';
-
-const config: ProjectConfig = {
-  projectName: 'test-project',
-  containerPrefix: 'test',
-  domain: 'test.local',
-  services: [
-    { name: 'nextjs', version: '20-alpine', category: 'app' },
-    { name: 'postgres', version: '16-alpine', category: 'database' }
-  ],
-  environments: ['local'],
-  proxy: { port: 8080, sslPort: 8443, vhostMode: 'path' },
-  outputPath: './test-output'
-};
-
-const fileWriter = new FileWriter();
-const structureBuilder = new StructureBuilder(fileWriter);
-
-await structureBuilder.buildStructure(config);
-console.log('✅ Structure created at ./test-output');
-```
-
-Run: `tsx test.ts`
-
-### Option 2: Test Plugin Loading
-Create `test-plugins.ts`:
-
-```typescript
-import { PluginRegistry } from './src/core/services/plugin-registry.js';
-
-const registry = new PluginRegistry();
-await registry.discoverPlugins();
-
-console.log('📦 Discovered plugins:');
-for (const plugin of registry.getAllPlugins()) {
-  console.log(`  - ${plugin.displayName} (${plugin.category})`);
-}
-```
-
-Run: `tsx test-plugins.ts`
-
----
-
-## 🔧 Add Remaining Plugins (Lower Priority)
-
-Follow the same pattern as PostgreSQL:
-
-### MySQL Plugin
-**File:** `src/plugins/database/mysql/index.ts`
-- Copy postgres plugin structure
-- Change image to `mysql:8-alpine`
-- Adjust env vars (MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE)
-- Update health check to `mysqladmin ping`
-
-### Redis Plugin
-**File:** `src/plugins/cache/redis/index.ts`
-- Image: `redis:7-alpine`
-- Simple compose block with volume
-- Health check: `redis-cli ping`
-- No custom Dockerfile needed
-
-### Valkey Plugin
-**File:** `src/plugins/cache/valkey/index.ts`
-- Similar to Redis
-- Image: `valkey/valkey:latest`
-
-### MailHog Plugin
-**File:** `src/plugins/mail/mailhog/index.ts`
-- Image: `mailhog/mailhog:latest`
-- Ports: 1025 (SMTP), 8025 (UI)
-- No auth needed for dev
-
-### Mailpit Plugin
-**File:** `src/plugins/mail/mailpit/index.ts`
-- Image: `axllent/mailpit:latest`
-- Similar to MailHog
-
----
-
-## 📊 Progress Tracker
-
-**Completion:** ~60% of MVP
-
-| Step | Task | Status | Estimate |
-|------|------|--------|----------|
-| 1-5 | Core + 4 Plugins | ✅ Done | - |
-| 6 | 5 More Plugins | ⏳ Pending | 2h |
-| 7 | CLI Commands | ⏳ **CRITICAL** | 3h |
-| 8 | Tests | ⏳ Pending | 4h |
-| 9 | Docs | ⏳ Pending | 2h |
-
-**Total Remaining:** ~11 hours
-
----
-
-## 🎯 Suggested Next Session Plan
-
-1. **Start here:** Implement CLI commands (Task 1-4 above) - 3 hours
-2. **Test it:** Generate a real project and verify it works - 1 hour
-3. **Add plugins:** Implement remaining 5 plugins - 2 hours
-4. **Polish:** Tests and documentation - as time permits
-
----
-
-## 💡 Quick Reference
-
-**Key Files to Understand:**
-- `src/core/interfaces/service-plugin.ts` - Plugin contract
-- `src/core/generator/project-generator.ts` - Orchestrator
-- `src/plugins/app/nextjs/index.ts` - Example plugin
-- `docs/designs/arch/architecture.md` - Full architecture plan
-
-**Build Commands:**
-```bash
-npm run build        # Compile TypeScript
-npm run dev         # Run with tsx (no compile)
-npm test            # Run tests (when added)
-```
-
-**Verify Build:**
-```bash
-ls dist/            # Should see compiled JS files
-```
-
----
-
-## 🐛 Troubleshooting
-
-**Build fails:**
-- Check `npm install` ran successfully
-- Verify `tsconfig.json` settings
-- Look for syntax errors in new code
-
-**Plugin not discovered:**
-- Verify `index.ts` exports default plugin instance
-- Check folder structure matches `src/plugins/{category}/{name}/`
-- Ensure plugin implements all IServicePlugin methods
-
-**Generated project fails:**
-- Run `docker compose config` to validate YAML
-- Check env var substitution (${VAR_NAME})
-- Verify file paths are correct
-
----
-
-## 📞 Need Help?
-
-Check these files:
-- `docs/PROGRESS.md` - Detailed progress and architecture
-- `docs/designs/arch/architecture.md` - Original plan
-- `src/core/interfaces/` - Type definitions and contracts
+**You're all set!** 🚀 The tool works great. Just needs tests and remaining docs.

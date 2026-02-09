@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server'
-import { exec } from 'child_process'
-import { promisify } from 'util'
 import path from 'path'
 import fs from 'fs/promises'
-
-const execAsync = promisify(exec)
 
 interface GenerateRequest {
   projectName: string
@@ -33,8 +29,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // Get paths
-    const dpbPath = path.join(process.cwd(), '..', 'dpb')
+    // Get output path
     const outputPath = path.join(process.cwd(), '..', `${projectName}-output`)
 
     // Check if project already exists
@@ -48,39 +43,47 @@ export async function POST(request: Request) {
       // Project doesn't exist, which is good
     }
 
-    // Build the command
-    const finalDomain = domain || `${projectName}.local`
-    const envArgs = environments.map(e => `-e ${e}`).join(' ')
-    const serviceArgs = services.map(s => `-s ${s}`).join(' ')
+    // Generate project using standalone script (avoids Node.js module caching issues)
+    const { exec } = await import('child_process')
+    const { promisify } = await import('util')
+    const execAsync = promisify(exec)
 
-    const command = `${dpbPath} create -n ${projectName} -d ${finalDomain} ${envArgs} ${serviceArgs} -o ${outputPath} -y`
+    const scriptPath = path.join(process.cwd(), 'generate-project.mjs')
+    const servicesArg = services.join(',')
+    const command = `node ${scriptPath} ${projectName} ${servicesArg}`
 
-    console.log('Executing command:', command)
-
-    // Execute the dpb create command
+    console.log(`Executing: ${command}`)
     const { stdout, stderr } = await execAsync(command, {
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+      maxBuffer: 10 * 1024 * 1024,
     })
 
-    if (stderr && !stderr.includes('warning')) {
-      console.error('dpb create stderr:', stderr)
-    }
+    // Parse the JSON output from the script
+    const lastLine = stdout.trim().split('\n').pop()
+    const result = JSON.parse(lastLine!)
 
-    console.log('dpb create stdout:', stdout)
+    if (!result.success) {
+      throw new Error(result.error || 'Generation failed')
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Project generated successfully',
       projectName,
       outputPath,
-      output: stdout,
+      ports: result.ports || {},
+      proxyPort: result.proxyPort || 8080,
+      output: `✓ Project ${projectName} generated successfully at ${outputPath}`,
     })
   } catch (error) {
     console.error('Failed to generate project:', error)
+    const errorDetails = error instanceof Error
+      ? `${error.message}\n${error.stack}`
+      : String(error)
+
     return NextResponse.json(
       {
         error: 'Failed to generate project',
-        details: error instanceof Error ? error.message : String(error),
+        details: errorDetails,
       },
       { status: 500 }
     )

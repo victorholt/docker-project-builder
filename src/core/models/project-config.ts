@@ -51,6 +51,9 @@ export const ProjectConfigSchema = z.object({
 
   proxy: ProxyConfigSchema,
 
+  // Optional port overrides for services (maps service name to external port)
+  ports: z.record(z.number().int().min(1).max(65535)).default({}),
+
   outputPath: z
     .string()
     .min(1, 'Output path is required'),

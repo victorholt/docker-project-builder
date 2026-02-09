@@ -42,13 +42,13 @@ export class NextjsPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       build: {
-        context: './docker/images',
-        dockerfile: 'nextjs.Dockerfile',
+        context: '../..',
+        dockerfile: 'docker/images/nextjs.Dockerfile',
         target: 'development',
       },
       container_name: `\${CONTAINER_PREFIX}-nextjs`,
       volumes: [
-        `./apps/nextjs:/app`,
+        `../../apps/nextjs:/app`,
         `/app/node_modules`,  // Anonymous volume for node_modules
       ],
       environment: {
@@ -65,7 +65,7 @@ export class NextjsPlugin implements IServicePlugin {
     // Dev: Hot reload, expose port for debugging
     return {
       serviceName: this.name,
-      ports: ['3000:3000'],
+      ports: ['${NEXTJS_EXTERNAL_PORT}:3000'],
       command: 'npm run dev',
     };
   }
@@ -75,8 +75,8 @@ export class NextjsPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       build: {
-        context: './docker/images',
-        dockerfile: 'nextjs.Dockerfile',
+        context: '../..',
+        dockerfile: 'docker/images/nextjs.Dockerfile',
         target: 'production',
       },
       environment: {
@@ -160,8 +160,10 @@ exec "$@"
   }
 
   getEnvVars(config: ProjectConfig, env: Environment): EnvVarBlock {
+    const externalPort = (config as any).ports?.[this.name] || 3000;
     return {
       NEXTJS_PORT: 3000,
+      NEXTJS_EXTERNAL_PORT: externalPort,
       NEXT_PUBLIC_API_URL: env === 'prod'
         ? `https://api.${config.domain}`
         : `http://${config.domain}:${config.proxy.port}/api`,

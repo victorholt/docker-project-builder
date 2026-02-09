@@ -266,6 +266,7 @@ export async function collectProjectConfig(registry: PluginRegistry): Promise<Pr
       sslPort: proxyConfig.sslPort,
       vhostMode: proxyConfig.vhostMode,
     },
+    ports: {}, // Use default ports (can be overridden per service)
     outputPath: outputConfig.outputPath,
   };
 
