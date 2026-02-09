@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Web UI
+webui/.next/
+webui/out/
+webui/node_modules/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Output directory (generated projects for testing)
+output/
+test-output/
+test-cli-output/
+*-output/
+
+# Temporary files
+*.log
+*.tmp
+.temp/
+
+# OS
+Thumbs.db
+default.profraw

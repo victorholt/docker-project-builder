@@ -1,0 +1,14 @@
+#!/usr/bin/env node
+
+/**
+ * Docker Project Builder CLI wrapper
+ * This is a convenience script to run dpb from the project root
+ */
+
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+import(join(__dirname, 'dist/index.js'));
