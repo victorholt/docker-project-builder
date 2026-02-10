@@ -50,6 +50,9 @@ export async function GET() {
       }
     }
 
+    // Filter out proxy - it's always auto-included and configured separately
+    delete services['proxy']
+
     return NextResponse.json({ services })
   } catch (error) {
     console.error('Failed to fetch services:', error)

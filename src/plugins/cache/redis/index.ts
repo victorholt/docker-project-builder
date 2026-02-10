@@ -31,7 +31,7 @@ export class RedisPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       image: `redis:${this.defaultVersion}`,
-      container_name: `\${CONTAINER_PREFIX}-redis`,
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-redis`,
       command: 'redis-server --appendonly yes',
       volumes: [
         'redis_data:/data',

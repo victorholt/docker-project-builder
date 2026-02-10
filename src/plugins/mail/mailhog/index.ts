@@ -31,7 +31,7 @@ export class MailhogPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       image: `mailhog/mailhog:${this.defaultVersion}`,
-      container_name: `\${CONTAINER_PREFIX}-mailhog`,
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-mailhog`,
       ports: [
         '1025:1025',  // SMTP
         '8025:8025',  // Web UI

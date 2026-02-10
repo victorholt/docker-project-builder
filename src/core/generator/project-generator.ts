@@ -101,7 +101,7 @@ export class ProjectGenerator {
     console.log(`🎯 Next steps:`);
     console.log(`   1. cd ${config.outputPath}`);
     console.log(`   2. Review and edit .env file`);
-    console.log(`   3. ./${config.projectName} up`);
+    console.log(`   3. ./cli up`);
   }
 
   /**
@@ -116,13 +116,13 @@ Docker-based project with multi-service architecture.
 
 \`\`\`bash
 # Start all services
-./${config.projectName} up
+./cli up
 
 # View logs
-./${config.projectName} logs
+./cli logs
 
 # Stop all services
-./${config.projectName} down
+./cli down
 \`\`\`
 
 ## 📋 Services
@@ -133,28 +133,28 @@ ${config.services.map((s) => `- **${s.name}** (${s.category}) - v${s.version}`).
 
 \`\`\`bash
 # Start containers
-./${config.projectName} up
+./cli up
 
 # Stop containers
-./${config.projectName} down
+./cli down
 
 # Build/rebuild containers
-./${config.projectName} build [service]
+./cli build [service]
 
 # View logs
-./${config.projectName} logs [service] [-f]
+./cli logs [service] [-f]
 
 # Execute command in container
-./${config.projectName} exec <service> <command>
+./cli exec <service> <command>
 
 # Open shell in container
-./${config.projectName} shell <service>
+./cli shell <service>
 
 # Show container status
-./${config.projectName} status
+./cli status
 
 # Restart containers
-./${config.projectName} restart [service]
+./cli restart [service]
 \`\`\`
 
 ## 📁 Project Structure
@@ -169,7 +169,7 @@ ${config.projectName}/
 │   └── proxy/           # Proxy configuration
 ├── bin/cli/             # CLI tool internals
 ├── .env                 # Environment variables
-└── ${config.projectName}           # Main CLI tool
+└── cli                    # Main CLI tool
 \`\`\`
 
 ## 🌐 Access URLs

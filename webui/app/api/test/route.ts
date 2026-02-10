@@ -70,7 +70,7 @@ export async function POST(request: Request) {
 
     // Build and start containers
     addLog('\nBuilding and starting Docker containers...')
-    const cliPath = path.join(outputPath, projectName)
+    const cliPath = path.join(outputPath, 'cli')
     const upCommand = `cd ${outputPath} && ${cliPath} build && ${cliPath} up -d`
 
     addLog(`Executing: ${upCommand}`)

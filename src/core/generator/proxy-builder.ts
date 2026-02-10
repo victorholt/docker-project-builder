@@ -72,21 +72,69 @@ export class ProxyBuilder {
       '    ErrorLog /proc/self/fd/2',
       '    CustomLog /proc/self/fd/1 combined',
       '',
+      '    # ACME challenge directory (for Let\'s Encrypt HTTP-01 validation)',
+      '    Alias /.well-known/acme-challenge/ /usr/local/apache2/htdocs/.well-known/acme-challenge/',
+      '    <Directory "/usr/local/apache2/htdocs/.well-known/acme-challenge/">',
+      '        Options None',
+      '        AllowOverride None',
+      '        Require all granted',
+      '    </Directory>',
+      '',
+      '    # Redirect to HTTPS when certificates are present',
+      `    <IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">`,
+      '        RewriteEngine On',
+      '        RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/',
+      '        RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]',
+      '    </IfFile>',
+      '',
     ];
 
-    // Add ProxyPass rules for each route
-    for (const route of routes) {
+    // Sort routes: more specific paths first (longer paths before shorter)
+    const sortedRoutes = [...routes].sort((a, b) => (b.path?.length || 0) - (a.path?.length || 0));
+
+    // Add ProxyPass rules for each route (used when no SSL certs exist)
+    for (const route of sortedRoutes) {
       if (route.path) {
         lines.push(`    # ${route.serviceName}`);
-        // Add trailing slash to path (except root) to strip the path prefix
         const proxyPath = route.path === '/' ? route.path : `${route.path}/`;
-        lines.push(`    ProxyPass ${proxyPath} http://${route.serviceName}:${route.port}/`);
-        lines.push(`    ProxyPassReverse ${proxyPath} http://${route.serviceName}:${route.port}/`);
+        lines.push(`    ProxyPass ${proxyPath} http://${route.serviceName}:${route.port}${proxyPath}`);
+        lines.push(`    ProxyPassReverse ${proxyPath} http://${route.serviceName}:${route.port}${proxyPath}`);
         lines.push('');
       }
     }
 
     lines.push('</VirtualHost>');
+    lines.push('');
+
+    // Add SSL VirtualHost (activated when certs exist)
+    lines.push(`# SSL VirtualHost (activated when certificates are generated via ./cli certs)`);
+    lines.push(`<IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">`);
+    lines.push('<VirtualHost *:443>');
+    lines.push(`    ServerName ${config.domain}`);
+    lines.push(`    ServerAdmin admin@${config.domain}`);
+    lines.push('');
+    lines.push('    SSLEngine on');
+    lines.push(`    SSLCertificateFile /usr/local/apache2/conf/ssl/${config.domain}.crt`);
+    lines.push(`    SSLCertificateKeyFile /usr/local/apache2/conf/ssl/${config.domain}.key`);
+    lines.push('    SSLCACertificateFile /usr/local/apache2/conf/ssl/ca.crt');
+    lines.push('');
+    lines.push('    # Error and access logs (Docker-friendly: stdout/stderr)');
+    lines.push('    ErrorLog /proc/self/fd/2');
+    lines.push('    CustomLog /proc/self/fd/1 combined');
+    lines.push('');
+
+    for (const route of sortedRoutes) {
+      if (route.path) {
+        lines.push(`    # ${route.serviceName}`);
+        const sslProxyPath = route.path === '/' ? route.path : `${route.path}/`;
+        lines.push(`    ProxyPass ${sslProxyPath} http://${route.serviceName}:${route.port}${sslProxyPath}`);
+        lines.push(`    ProxyPassReverse ${sslProxyPath} http://${route.serviceName}:${route.port}${sslProxyPath}`);
+        lines.push('');
+      }
+    }
+
+    lines.push('</VirtualHost>');
+    lines.push('</IfFile>');
 
     const content = lines.join('\n') + '\n';
     const filePath = join(proxyDir, fileName);
@@ -110,9 +158,46 @@ export class ProxyBuilder {
       if (route.subdomain) {
         const serverName = `${route.subdomain}.${config.domain}`;
 
+        // HTTP VirtualHost
         lines.push('<VirtualHost *:80>');
         lines.push(`    ServerName ${serverName}`);
         lines.push(`    ServerAdmin admin@${config.domain}`);
+        lines.push('');
+        lines.push('    # Error and access logs (Docker-friendly: stdout/stderr)');
+        lines.push('    ErrorLog /proc/self/fd/2');
+        lines.push('    CustomLog /proc/self/fd/1 combined');
+        lines.push('');
+        lines.push('    # ACME challenge directory (for Let\'s Encrypt HTTP-01 validation)');
+        lines.push('    Alias /.well-known/acme-challenge/ /usr/local/apache2/htdocs/.well-known/acme-challenge/');
+        lines.push('    <Directory "/usr/local/apache2/htdocs/.well-known/acme-challenge/">');
+        lines.push('        Options None');
+        lines.push('        AllowOverride None');
+        lines.push('        Require all granted');
+        lines.push('    </Directory>');
+        lines.push('');
+        lines.push('    # Redirect to HTTPS when certificates are present');
+        lines.push(`    <IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">`);
+        lines.push('        RewriteEngine On');
+        lines.push('        RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/');
+        lines.push('        RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]');
+        lines.push('    </IfFile>');
+        lines.push('');
+        lines.push(`    # Proxy to ${route.serviceName}`);
+        lines.push(`    ProxyPass / http://${route.serviceName}:${route.port}/`);
+        lines.push(`    ProxyPassReverse / http://${route.serviceName}:${route.port}/`);
+        lines.push('</VirtualHost>');
+        lines.push('');
+
+        // SSL VirtualHost (activated when certs exist)
+        lines.push(`<IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">`);
+        lines.push('<VirtualHost *:443>');
+        lines.push(`    ServerName ${serverName}`);
+        lines.push(`    ServerAdmin admin@${config.domain}`);
+        lines.push('');
+        lines.push('    SSLEngine on');
+        lines.push(`    SSLCertificateFile /usr/local/apache2/conf/ssl/${config.domain}.crt`);
+        lines.push(`    SSLCertificateKeyFile /usr/local/apache2/conf/ssl/${config.domain}.key`);
+        lines.push('    SSLCACertificateFile /usr/local/apache2/conf/ssl/ca.crt');
         lines.push('');
         lines.push('    # Error and access logs (Docker-friendly: stdout/stderr)');
         lines.push('    ErrorLog /proc/self/fd/2');
@@ -122,6 +207,7 @@ export class ProxyBuilder {
         lines.push(`    ProxyPass / http://${route.serviceName}:${route.port}/`);
         lines.push(`    ProxyPassReverse / http://${route.serviceName}:${route.port}/`);
         lines.push('</VirtualHost>');
+        lines.push('</IfFile>');
         lines.push('');
       }
     }
@@ -172,6 +258,8 @@ LoadModule autoindex_module modules/mod_autoindex.so
 LoadModule dir_module modules/mod_dir.so
 LoadModule alias_module modules/mod_alias.so
 LoadModule rewrite_module modules/mod_rewrite.so
+LoadModule ssl_module modules/mod_ssl.so
+LoadModule socache_shmcb_module modules/mod_socache_shmcb.so
 
 <IfModule unixd_module>
     User daemon
@@ -187,6 +275,13 @@ DocumentRoot "/usr/local/apache2/htdocs"
 <Directory />
     AllowOverride none
     Require all denied
+</Directory>
+
+# Allow access to ACME challenge directory (for Let's Encrypt)
+<Directory "/usr/local/apache2/htdocs/.well-known">
+    Options None
+    AllowOverride None
+    Require all granted
 </Directory>
 
 # Error and access logs
@@ -207,6 +302,20 @@ ProxyPreserveHost On
     Order deny,allow
     Allow from all
 </Proxy>
+
+# SSL Configuration (enabled when certificates are present)
+<IfModule ssl_module>
+    <IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">
+        SSLCipherSuite HIGH:MEDIUM:!MD5:!RC4:!3DES
+        SSLProxyCipherSuite HIGH:MEDIUM:!MD5:!RC4:!3DES
+        SSLHonorCipherOrder on
+        SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1
+        SSLProxyProtocol all -SSLv3 -TLSv1 -TLSv1.1
+        SSLPassPhraseDialog  builtin
+        SSLSessionCache "shmcb:/usr/local/apache2/logs/ssl_scache(512000)"
+        SSLSessionCacheTimeout 300
+    </IfFile>
+</IfModule>
 
 # Include vhosts
 IncludeOptional conf/vhosts/*.conf

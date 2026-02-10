@@ -35,6 +35,8 @@ export function ProjectWizard({ onProjectCreated }: ProjectWizardProps) {
   const [servicePorts, setServicePorts] = useState<Record<string, number>>({})
   const { toast } = useToast()
 
+  const [proxyPort, setProxyPort] = useState(8080)
+
   // Default ports for each service
   const defaultPorts: Record<string, number> = {
     nextjs: 3000,
@@ -138,7 +140,7 @@ export function ProjectWizard({ onProjectCreated }: ProjectWizardProps) {
           domain: domain || `${projectName}.local`,
           services: selectedServices,
           environments,
-          ports: servicePorts,
+          ports: { ...servicePorts, proxy: proxyPort },
         }),
       })
 
@@ -162,7 +164,7 @@ export function ProjectWizard({ onProjectCreated }: ProjectWizardProps) {
 
       toast({
         title: 'Project Downloaded!',
-        description: `${projectName}.zip is ready. Extract it and run ./dpb-${projectName} to get started.`,
+        description: `${projectName}.zip is ready. Extract it and run ./cli to get started.`,
       })
 
       if (onProjectCreated) {
@@ -213,6 +215,25 @@ export function ProjectWizard({ onProjectCreated }: ProjectWizardProps) {
             />
             <p className="text-xs text-muted-foreground">
               Defaults to {projectName || 'project-name'}.local
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="proxyPort">Proxy Port</Label>
+            <Input
+              id="proxyPort"
+              type="number"
+              min="1"
+              max="65535"
+              value={proxyPort}
+              onChange={(e) => {
+                const val = parseInt(e.target.value)
+                if (!isNaN(val) && val >= 1 && val <= 65535) setProxyPort(val)
+              }}
+              className="w-32"
+            />
+            <p className="text-xs text-muted-foreground">
+              The port Apache proxy listens on (serves all services)
             </p>
           </div>
         </div>

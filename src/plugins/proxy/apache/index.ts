@@ -35,10 +35,10 @@ export class ApacheProxyPlugin implements IServicePlugin {
         context: '../..',
         dockerfile: 'docker/proxy/Dockerfile',
       },
-      container_name: `\${CONTAINER_PREFIX}-proxy`,
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-proxy`,
       ports: [
-        '\${PROXY_PORT}:80',
-        '\${PROXY_SSL_PORT}:443',
+        `\${PROXY_PORT:-${config.proxy.port}}:80`,
+        `\${PROXY_SSL_PORT:-${config.proxy.sslPort}}:443`,
       ],
       volumes: [
         '../../docker/proxy/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro',
@@ -59,11 +59,12 @@ export class ApacheProxyPlugin implements IServicePlugin {
   }
 
   getComposeProd(config: ProjectConfig): ComposeServiceBlock | null {
-    // In prod, use prod vhosts configuration
+    // In prod, use prod vhosts configuration + certbot webroot volume
     return {
       serviceName: 'proxy',
       volumes: [
         '../../docker/proxy/httpd-vhosts-prod.conf:/usr/local/apache2/conf/vhosts/httpd-vhosts.conf:ro',
+        'certbot-webroot:/usr/local/apache2/htdocs',
       ],
     };
   }
@@ -76,11 +77,14 @@ FROM httpd:${this.defaultVersion}
 # Enable proxy modules
 RUN sed -i 's/#LoadModule proxy_module/LoadModule proxy_module/' /usr/local/apache2/conf/httpd.conf && \\
     sed -i 's/#LoadModule proxy_http_module/LoadModule proxy_http_module/' /usr/local/apache2/conf/httpd.conf && \\
-    sed -i 's/#LoadModule rewrite_module/LoadModule rewrite_module/' /usr/local/apache2/conf/httpd.conf
+    sed -i 's/#LoadModule rewrite_module/LoadModule rewrite_module/' /usr/local/apache2/conf/httpd.conf && \\
+    sed -i 's/#LoadModule ssl_module/LoadModule ssl_module/' /usr/local/apache2/conf/httpd.conf && \\
+    sed -i 's/#LoadModule socache_shmcb_module/LoadModule socache_shmcb_module/' /usr/local/apache2/conf/httpd.conf
 
 # Create vhosts config directory
 RUN mkdir -p /usr/local/apache2/conf/vhosts && \\
-    mkdir -p /usr/local/apache2/conf/ssl
+    mkdir -p /usr/local/apache2/conf/ssl && \\
+    mkdir -p /usr/local/apache2/htdocs/.well-known/acme-challenge
 
 # Copy entrypoint script
 COPY docker/scripts/proxy-entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -113,6 +117,15 @@ exec "$@"
   }
 
   getVolumes(config: ProjectConfig): VolumeDefinition[] {
+    // certbot-webroot is used in staging/prod for Let's Encrypt ACME challenges
+    if (config.environments.includes('staging') || config.environments.includes('prod')) {
+      return [
+        {
+          name: 'certbot-webroot',
+          driver: 'local',
+        },
+      ];
+    }
     return [];
   }
 

@@ -31,7 +31,7 @@ export class MailpitPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       image: `axllent/mailpit:${this.defaultVersion}`,
-      container_name: `\${CONTAINER_PREFIX}-mailpit`,
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-mailpit`,
       ports: [
         '1025:1025',  // SMTP
         '8025:8025',  // Web UI

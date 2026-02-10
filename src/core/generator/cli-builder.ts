@@ -31,7 +31,7 @@ export class CLIBuilder {
   }
 
   /**
-   * Builds the main CLI entry point (e.g., ./myapp)
+   * Builds the main CLI entry point (./cli)
    */
   private async buildMainCLI(outputPath: string, projectName: string): Promise<void> {
     const content = `#!/usr/bin/env bash
@@ -48,6 +48,37 @@ PROJECT_ROOT="\${SCRIPT_DIR}"
 # Source common utilities
 source "\${SCRIPT_DIR}/bin/cli/common.sh"
 
+show_help() {
+    cat << EOF
+${projectName} CLI - Docker Project Management Tool
+
+Usage: ./cli [command] [options]
+
+Commands:
+    up          Start all containers
+    down        Stop and remove containers
+    clean       Remove containers, volumes, and local images
+    build       Build or rebuild containers
+    logs        View container logs
+    exec        Execute a command in a container
+    shell       Open a shell in a container
+    status      Show container status
+    restart     Restart containers
+    certs       Generate SSL certificates (self-signed or Let's Encrypt)
+    certs-renew Renew Let's Encrypt certificates
+    help        Show this help message
+
+Examples:
+    ./cli up
+    ./cli logs api
+    ./cli shell nextjs
+    ./cli exec api npm install
+    ./cli certs
+    ./cli certs-renew
+
+EOF
+}
+
 # Command dispatcher
 COMMAND="\${1:-help}"
 shift || true
@@ -58,6 +89,9 @@ case "\${COMMAND}" in
         ;;
     down)
         source "\${SCRIPT_DIR}/bin/cli/commands/down.sh"
+        ;;
+    clean)
+        source "\${SCRIPT_DIR}/bin/cli/commands/clean.sh"
         ;;
     build)
         source "\${SCRIPT_DIR}/bin/cli/commands/build.sh"
@@ -77,6 +111,12 @@ case "\${COMMAND}" in
     restart)
         source "\${SCRIPT_DIR}/bin/cli/commands/restart.sh"
         ;;
+    certs)
+        source "\${SCRIPT_DIR}/bin/cli/commands/certs.sh"
+        ;;
+    certs-renew)
+        source "\${SCRIPT_DIR}/bin/cli/commands/certs-renew.sh"
+        ;;
     help|--help|-h)
         show_help
         ;;
@@ -87,35 +127,9 @@ case "\${COMMAND}" in
         exit 1
         ;;
 esac
-
-show_help() {
-    cat << EOF
-${projectName} CLI - Docker Project Management Tool
-
-Usage: ./${projectName} [command] [options]
-
-Commands:
-    up          Start all containers
-    down        Stop all containers
-    build       Build or rebuild containers
-    logs        View container logs
-    exec        Execute a command in a container
-    shell       Open a shell in a container
-    status      Show container status
-    restart     Restart containers
-    help        Show this help message
-
-Examples:
-    ./${projectName} up
-    ./${projectName} logs api
-    ./${projectName} shell nextjs
-    ./${projectName} exec api npm install
-
-EOF
-}
 `;
 
-    const filePath = join(outputPath, projectName);
+    const filePath = join(outputPath, 'cli');
     await this.fileWriter.writeFile(filePath, content);
     await this.fileWriter.makeExecutable(filePath);
   }
@@ -152,14 +166,36 @@ error() {
     echo -e "\${RED}✗\${NC} $*" >&2
 }
 
-# Docker Compose wrapper
+# Docker Compose wrapper (environment-aware)
 dc() {
-    # Load base compose and override if it exists
     local compose_files="-f \${PROJECT_ROOT}/docker/compose/docker-compose.yml"
-    if [ -f "\${PROJECT_ROOT}/docker/compose/docker-compose.override.yml" ]; then
-        compose_files="$compose_files -f \${PROJECT_ROOT}/docker/compose/docker-compose.override.yml"
+
+    # Determine environment from APP_ENV
+    local env="\${APP_ENV:-local}"
+
+    case "\${env}" in
+        local)
+            if [ -f "\${PROJECT_ROOT}/docker/compose/docker-compose.override.yml" ]; then
+                compose_files="\$compose_files -f \${PROJECT_ROOT}/docker/compose/docker-compose.override.yml"
+            fi
+            ;;
+        staging)
+            if [ -f "\${PROJECT_ROOT}/docker/compose/docker-compose.staging.yml" ]; then
+                compose_files="\$compose_files -f \${PROJECT_ROOT}/docker/compose/docker-compose.staging.yml"
+            fi
+            ;;
+        prod)
+            if [ -f "\${PROJECT_ROOT}/docker/compose/docker-compose.prod.yml" ]; then
+                compose_files="\$compose_files -f \${PROJECT_ROOT}/docker/compose/docker-compose.prod.yml"
+            fi
+            ;;
+    esac
+
+    local env_file=""
+    if [ -f "\${PROJECT_ROOT}/.env" ]; then
+        env_file="--env-file \${PROJECT_ROOT}/.env"
     fi
-    docker compose $compose_files "$@"
+    docker compose \$env_file \$compose_files "$@"
 }
 
 # Check if docker is running
@@ -207,6 +243,9 @@ service_exists() {
     // down command
     await this.buildDownCommand(commandsDir);
 
+    // clean command
+    await this.buildCleanCommand(commandsDir);
+
     // build command
     await this.buildBuildCommand(commandsDir);
 
@@ -224,6 +263,12 @@ service_exists() {
 
     // restart command
     await this.buildRestartCommand(commandsDir);
+
+    // certs command
+    await this.buildCertsCommand(commandsDir, config);
+
+    // certs-renew command
+    await this.buildCertsRenewCommand(commandsDir, config);
   }
 
   /**
@@ -241,8 +286,8 @@ info "Starting containers..."
 dc up -d "$@"
 
 success "Containers started successfully!"
-info "Run './\${PROJECT_NAME} status' to see container status"
-info "Run './\${PROJECT_NAME} logs' to view logs"
+info "Run './cli status' to see container status"
+info "Run './cli logs' to view logs"
 `;
 
     await this.fileWriter.writeFile(join(commandsDir, 'up.sh'), content);
@@ -265,6 +310,25 @@ success "Containers stopped successfully!"
 `;
 
     await this.fileWriter.writeFile(join(commandsDir, 'down.sh'), content);
+  }
+
+  /**
+   * Builds the 'clean' command
+   */
+  private async buildCleanCommand(commandsDir: string): Promise<void> {
+    const content = `#!/usr/bin/env bash
+
+# Remove all project containers, volumes, and local images
+
+check_docker
+
+info "Removing project containers, volumes, and images..."
+dc down --volumes --rmi local "$@"
+
+success "Project cleaned successfully!"
+`;
+
+    await this.fileWriter.writeFile(join(commandsDir, 'clean.sh'), content);
   }
 
   /**
@@ -446,6 +510,375 @@ fi
 `;
 
     await this.fileWriter.writeFile(join(commandsDir, 'restart.sh'), content);
+  }
+
+  /**
+   * Builds the 'certs' command
+   */
+  private async buildCertsCommand(commandsDir: string, config: ProjectConfig): Promise<void> {
+    const content = `#!/usr/bin/env bash
+
+# SSL Certificate management command
+# Usage: ./cli certs [--domain=<domain>] [--days=<days>] [--force] [--email=<email>] [--staging-le]
+
+# ============================================================================
+# Help
+# ============================================================================
+
+show_cert_help() {
+    echo "Generate SSL Certificates"
+    echo ""
+    echo "Usage:"
+    echo "  ./cli certs [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --domain=<domain>  Domain to generate cert for (default: ${config.domain})"
+    echo "  --days=<days>      Certificate validity in days (default: 365, local only)"
+    echo "  --force            Regenerate existing certificates"
+    echo "  --email=<email>    Email for Let's Encrypt registration (staging/prod)"
+    echo "  --staging-le       Use Let's Encrypt staging server (for testing)"
+    echo "  -h, --help         Show this help message"
+    echo ""
+    echo "Behavior by environment (APP_ENV):"
+    echo "  local              Self-signed CA + domain certificate (openssl)"
+    echo "  staging/prod       Let's Encrypt certificate via certbot"
+    echo ""
+    echo "Examples:"
+    echo "  ./cli certs                                   # Local: self-signed for ${config.domain}"
+    echo "  ./cli certs --force                           # Regenerate certificates"
+    echo "  ./cli certs --email=admin@example.com         # Staging/Prod: Let's Encrypt"
+    echo "  ./cli certs --staging-le                      # Test with LE staging server"
+    echo ""
+    echo "Notes:"
+    echo "  - Local: Creates a CA and signs domain certs. macOS Keychain trust optional."
+    echo "  - Staging/Prod: Uses certbot with HTTP-01 challenge (proxy must be running)."
+    echo "  - After generating, rebuild proxy: ./cli build proxy && ./cli restart proxy"
+    echo ""
+}
+
+# ============================================================================
+# Parse Arguments
+# ============================================================================
+
+load_env
+
+DOMAIN="\${DOMAIN:-${config.domain}}"
+DAYS="365"
+FORCE=""
+EMAIL="\${CERT_EMAIL:-admin@\${DOMAIN}}"
+LE_STAGING=""
+
+while [[ \$# -gt 0 ]]; do
+    case \$1 in
+        --domain=*)
+            DOMAIN="\${1#*=}"
+            shift
+            ;;
+        --days=*)
+            DAYS="\${1#*=}"
+            shift
+            ;;
+        --force)
+            FORCE="true"
+            shift
+            ;;
+        --email=*)
+            EMAIL="\${1#*=}"
+            shift
+            ;;
+        --staging-le)
+            LE_STAGING="true"
+            shift
+            ;;
+        -h|--help)
+            show_cert_help
+            exit 0
+            ;;
+        *)
+            error "Unknown option: \$1"
+            show_cert_help
+            exit 1
+            ;;
+    esac
+done
+
+SSL_DIR="\${PROJECT_ROOT}/docker/ssl"
+ENV="\${APP_ENV:-local}"
+
+mkdir -p "\${SSL_DIR}"
+
+# ============================================================================
+# Local: Self-signed CA + Domain Certificate
+# ============================================================================
+
+generate_self_signed() {
+    # Check if openssl is available
+    if ! command -v openssl &> /dev/null; then
+        error "openssl is not installed. Please install it and try again."
+        exit 1
+    fi
+
+    CA_KEY="\${SSL_DIR}/ca.key"
+    CA_CERT="\${SSL_DIR}/ca.crt"
+
+    # Step 1: Create local Certificate Authority (CA)
+    if [ -f "\${CA_KEY}" ] && [ -f "\${CA_CERT}" ] && [ -z "\${FORCE}" ]; then
+        info "Using existing Certificate Authority"
+    else
+        info "Creating local Certificate Authority..."
+
+        openssl genrsa -out "\${CA_KEY}" 4096 2>/dev/null
+
+        openssl req -x509 -new -nodes \\
+            -key "\${CA_KEY}" \\
+            -sha256 \\
+            -days 1825 \\
+            -out "\${CA_CERT}" \\
+            -subj "/C=US/ST=Local/L=Local/O=${config.projectName} Dev CA/CN=${config.projectName} Local CA"
+
+        if [ \$? -ne 0 ]; then
+            error "Failed to create Certificate Authority."
+            exit 1
+        fi
+
+        success "Certificate Authority created"
+    fi
+
+    # Step 2: Generate domain certificate signed by our CA
+    DOMAIN_KEY="\${SSL_DIR}/\${DOMAIN}.key"
+    DOMAIN_CERT="\${SSL_DIR}/\${DOMAIN}.crt"
+    DOMAIN_CSR="\${SSL_DIR}/\${DOMAIN}.csr"
+    DOMAIN_EXT="\${SSL_DIR}/\${DOMAIN}.ext"
+
+    if [ -f "\${DOMAIN_KEY}" ] && [ -f "\${DOMAIN_CERT}" ] && [ -z "\${FORCE}" ]; then
+        warning "Certificate for \${DOMAIN} already exists. Use --force to regenerate."
+        exit 0
+    fi
+
+    info "Generating certificate for \${DOMAIN}..."
+
+    openssl genrsa -out "\${DOMAIN_KEY}" 2048 2>/dev/null
+
+    openssl req -new \\
+        -key "\${DOMAIN_KEY}" \\
+        -out "\${DOMAIN_CSR}" \\
+        -subj "/C=US/ST=Local/L=Local/O=${config.projectName}/CN=\${DOMAIN}"
+
+    cat > "\${DOMAIN_EXT}" << EXTEOF
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = \${DOMAIN}
+DNS.2 = *.\${DOMAIN}
+DNS.3 = localhost
+IP.1 = 127.0.0.1
+EXTEOF
+
+    openssl x509 -req \\
+        -in "\${DOMAIN_CSR}" \\
+        -CA "\${CA_CERT}" \\
+        -CAkey "\${CA_KEY}" \\
+        -CAcreateserial \\
+        -out "\${DOMAIN_CERT}" \\
+        -days "\${DAYS}" \\
+        -sha256 \\
+        -extfile "\${DOMAIN_EXT}" 2>/dev/null
+
+    if [ \$? -ne 0 ]; then
+        error "Failed to generate domain certificate."
+        exit 1
+    fi
+
+    rm -f "\${DOMAIN_CSR}" "\${DOMAIN_EXT}" "\${SSL_DIR}/ca.srl"
+
+    success "SSL certificate generated for \${DOMAIN}"
+    echo ""
+    info "CA Certificate:     \${CA_CERT}"
+    info "Domain Certificate: \${DOMAIN_CERT}"
+    info "Domain Private Key: \${DOMAIN_KEY}"
+    echo ""
+
+    # macOS Keychain trust (optional)
+    if [[ "\$(uname)" == "Darwin" ]]; then
+        echo ""
+        read -p "Add CA to macOS Keychain for browser trust? [y/N] " -n 1 -r
+        echo ""
+        if [[ \$REPLY =~ ^[Yy]$ ]]; then
+            info "Adding CA certificate to macOS Keychain (requires sudo)..."
+            sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "\${CA_CERT}"
+            if [ \$? -eq 0 ]; then
+                success "CA added to Keychain. Browsers will trust \${DOMAIN} certificates."
+            else
+                warning "Failed to add CA to Keychain. You can do it manually:"
+                echo "  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain \${CA_CERT}"
+            fi
+        else
+            info "Skipping Keychain trust. To manually trust later:"
+            echo "  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain \${CA_CERT}"
+        fi
+    fi
+
+    echo ""
+    info "To apply certificates, rebuild and restart the proxy:"
+    echo "  ./cli build proxy && ./cli restart proxy"
+    echo ""
+    warning "These are self-signed certificates for local development only."
+}
+
+# ============================================================================
+# Staging/Prod: Let's Encrypt via Certbot
+# ============================================================================
+
+generate_letsencrypt() {
+    check_docker
+
+    # Verify proxy is running (needed for HTTP-01 challenge)
+    if ! dc ps --format '{{.State}}' proxy 2>/dev/null | grep -qi "running"; then
+        error "Proxy must be running for Let's Encrypt HTTP-01 challenge."
+        info "Start the proxy first: ./cli up proxy"
+        exit 1
+    fi
+
+    info "Requesting Let's Encrypt certificate for \${DOMAIN}..."
+
+    # Build certbot arguments
+    local certbot_args="certonly --webroot -w /var/www/certbot"
+    certbot_args="\${certbot_args} --email \${EMAIL} --agree-tos --no-eff-email"
+    certbot_args="\${certbot_args} -d \${DOMAIN}"
+
+    # Use LE staging server for testing
+    if [ -n "\${LE_STAGING}" ]; then
+        certbot_args="\${certbot_args} --staging"
+        warning "Using Let's Encrypt STAGING server (certs will NOT be trusted)"
+    fi
+
+    # Force renewal
+    if [ -n "\${FORCE}" ]; then
+        certbot_args="\${certbot_args} --force-renewal"
+    fi
+
+    # Create letsencrypt directory
+    mkdir -p "\${SSL_DIR}/letsencrypt"
+
+    # Run certbot via docker compose
+    dc run --rm --profile certbot certbot \${certbot_args}
+
+    if [ \$? -ne 0 ]; then
+        error "Let's Encrypt certificate request failed."
+        info "Make sure:"
+        echo "  - Port 80 is accessible from the internet"
+        echo "  - DNS for \${DOMAIN} points to this server"
+        echo "  - Proxy is running: ./cli up proxy"
+        exit 1
+    fi
+
+    # Copy certs to standard location for Apache
+    local le_live="\${SSL_DIR}/letsencrypt/live/\${DOMAIN}"
+    if [ -d "\${le_live}" ]; then
+        cp -L "\${le_live}/fullchain.pem" "\${SSL_DIR}/\${DOMAIN}.crt"
+        cp -L "\${le_live}/privkey.pem" "\${SSL_DIR}/\${DOMAIN}.key"
+        cp -L "\${le_live}/chain.pem" "\${SSL_DIR}/ca.crt"
+        success "Let's Encrypt certificates installed for \${DOMAIN}"
+    else
+        error "Let's Encrypt certificates not found at expected path."
+        exit 1
+    fi
+
+    # Reload Apache to pick up new certs
+    info "Reloading Apache..."
+    dc exec proxy httpd -k graceful
+    success "Apache reloaded with new certificates."
+
+    echo ""
+    info "Certificate: \${SSL_DIR}/\${DOMAIN}.crt"
+    info "Private Key: \${SSL_DIR}/\${DOMAIN}.key"
+    echo ""
+    info "To renew certificates later: ./cli certs-renew"
+    warning "Certificates expire in 90 days. Set up a cron job for automatic renewal."
+}
+
+# ============================================================================
+# Execute based on environment
+# ============================================================================
+
+case "\${ENV}" in
+    local)
+        info "Environment: local (self-signed certificates)"
+        generate_self_signed
+        ;;
+    staging|prod)
+        info "Environment: \${ENV} (Let's Encrypt)"
+        generate_letsencrypt
+        ;;
+    *)
+        error "Unknown environment: \${ENV}"
+        info "Set APP_ENV in your .env file to: local, staging, or prod"
+        exit 1
+        ;;
+esac
+`;
+
+    await this.fileWriter.writeFile(join(commandsDir, 'certs.sh'), content);
+  }
+
+  /**
+   * Builds the 'certs-renew' command
+   */
+  private async buildCertsRenewCommand(commandsDir: string, config: ProjectConfig): Promise<void> {
+    const content = `#!/usr/bin/env bash
+
+# Renew SSL certificates
+# For Let's Encrypt (staging/prod) environments
+
+load_env
+
+ENV="\${APP_ENV:-local}"
+DOMAIN="\${DOMAIN:-${config.domain}}"
+SSL_DIR="\${PROJECT_ROOT}/docker/ssl"
+
+if [ "\${ENV}" = "local" ]; then
+    info "Local environment uses self-signed certificates."
+    info "To regenerate, run: ./cli certs --force"
+    exit 0
+fi
+
+check_docker
+
+info "Renewing Let's Encrypt certificates..."
+
+# Run certbot renew
+dc run --rm --profile certbot certbot renew
+
+if [ \$? -ne 0 ]; then
+    error "Certificate renewal failed."
+    exit 1
+fi
+
+# Copy renewed certs to standard location
+LE_LIVE="\${SSL_DIR}/letsencrypt/live/\${DOMAIN}"
+if [ -d "\${LE_LIVE}" ]; then
+    cp -L "\${LE_LIVE}/fullchain.pem" "\${SSL_DIR}/\${DOMAIN}.crt"
+    cp -L "\${LE_LIVE}/privkey.pem" "\${SSL_DIR}/\${DOMAIN}.key"
+    cp -L "\${LE_LIVE}/chain.pem" "\${SSL_DIR}/ca.crt"
+    success "Certificates renewed for \${DOMAIN}"
+else
+    warning "No renewed certificates found. They may not have been due for renewal."
+fi
+
+# Reload Apache
+info "Reloading Apache..."
+dc exec proxy httpd -k graceful
+success "Apache reloaded."
+
+echo ""
+info "Tip: Add a cron job for automatic renewal:"
+echo "  0 3 * * * cd \${PROJECT_ROOT} && ./cli certs-renew >> /var/log/cert-renew.log 2>&1"
+`;
+
+    await this.fileWriter.writeFile(join(commandsDir, 'certs-renew.sh'), content);
   }
 
   /**

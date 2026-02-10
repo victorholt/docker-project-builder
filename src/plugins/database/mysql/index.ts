@@ -31,12 +31,12 @@ export class MysqlPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       image: `mysql:${this.defaultVersion}`,
-      container_name: `\${CONTAINER_PREFIX}-mysql`,
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-mysql`,
       environment: {
-        MYSQL_ROOT_PASSWORD: '\${MYSQL_ROOT_PASSWORD}',
-        MYSQL_DATABASE: '\${MYSQL_DATABASE}',
-        MYSQL_USER: '\${MYSQL_USER}',
-        MYSQL_PASSWORD: '\${MYSQL_PASSWORD}',
+        MYSQL_ROOT_PASSWORD: `\${MYSQL_ROOT_PASSWORD:-${config.projectName}_root}`,
+        MYSQL_DATABASE: `\${MYSQL_DATABASE:-${config.projectName}_db}`,
+        MYSQL_USER: `\${MYSQL_USER:-${config.projectName}_user}`,
+        MYSQL_PASSWORD: `\${MYSQL_PASSWORD:-${config.projectName}_pass}`,
       },
       volumes: [
         'mysql_data:/var/lib/mysql',

@@ -31,11 +31,11 @@ export class PostgresPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       image: `postgres:${this.defaultVersion}`,
-      container_name: `\${CONTAINER_PREFIX}-postgres`,
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-postgres`,
       environment: {
-        POSTGRES_USER: '\${POSTGRES_USER}',
-        POSTGRES_PASSWORD: '\${POSTGRES_PASSWORD}',
-        POSTGRES_DB: '\${POSTGRES_DB}',
+        POSTGRES_USER: `\${POSTGRES_USER:-${config.projectName}_user}`,
+        POSTGRES_PASSWORD: `\${POSTGRES_PASSWORD:-${config.projectName}_pass}`,
+        POSTGRES_DB: `\${POSTGRES_DB:-${config.projectName}_db}`,
         PGDATA: '/var/lib/postgresql/data/pgdata',
       },
       volumes: [

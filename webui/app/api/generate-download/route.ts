@@ -4,7 +4,6 @@ import { promisify } from 'util'
 import path from 'path'
 import fs from 'fs/promises'
 import archiver from 'archiver'
-import { Readable } from 'stream'
 
 const execAsync = promisify(exec)
 
@@ -17,7 +16,7 @@ interface GenerateRequest {
 }
 
 export async function POST(request: Request) {
-  let tempDir: string | null = null
+  let outputPath: string | null = null
 
   try {
     const body: GenerateRequest = await request.json()
@@ -38,60 +37,34 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create temp directory
-    const tmpBase = path.join(process.cwd(), '..','.tmp')
-    await fs.mkdir(tmpBase, { recursive: true })
+    // Use generate-project.mjs as a separate process to avoid
+    // plugin discovery issues inside the Next.js runtime
+    const scriptPath = path.join(process.cwd(), 'generate-project.mjs')
+    const servicesArg = services.join(',')
+    const envArg = environments.join(',')
+    const portsArg = JSON.stringify(ports)
+    const domainArg = domain || `${projectName}.local`
 
-    tempDir = path.join(tmpBase, `${projectName}-${Date.now()}`)
-    const outputPath = path.join(tempDir, projectName)
+    const command = `node ${scriptPath} ${projectName} ${servicesArg} ${domainArg} ${envArg} '${portsArg}'`
 
-    // Generate project using the generate module
-    const { ProjectGenerator } = await import('../../../../dist/core/generator/project-generator.js')
-    const { PluginRegistry } = await import('../../../../dist/core/services/plugin-registry.js')
-    const { FileWriter } = await import('../../../../dist/core/services/file-writer.js')
-    const { TemplateRenderer } = await import('../../../../dist/core/services/template-renderer.js')
+    console.log(`Executing: ${command}`)
+    const { stdout, stderr } = await execAsync(command, {
+      maxBuffer: 10 * 1024 * 1024,
+    })
 
-    // Discover plugins
-    const registry = new PluginRegistry()
-    await registry.discoverPlugins()
-
-    // Get selected plugins
-    const plugins = []
-    const proxyPlugin = registry.getPlugin('proxy')
-    if (proxyPlugin) plugins.push(proxyPlugin)
-
-    for (const serviceName of services) {
-      const plugin = registry.getPlugin(serviceName)
-      if (plugin) plugins.push(plugin)
+    if (stderr) {
+      console.warn('Generation warnings:', stderr)
     }
 
-    // Build config
-    const config = {
-      projectName,
-      containerPrefix: projectName,
-      domain: domain || `${projectName}.local`,
-      services: services.map(name => ({
-        name,
-        version: 'latest',
-        enabled: true,
-      })),
-      environments: environments as Array<'local' | 'staging' | 'prod'>,
-      proxy: {
-        enabled: true,
-        type: 'path-based' as const,
-        port: 8080,
-        sslPort: 8443,
-      },
-      ports,
-      outputPath,
+    // Parse the JSON output from the script
+    const lastLine = stdout.trim().split('\n').pop()
+    const result = JSON.parse(lastLine!)
+
+    if (!result.success) {
+      throw new Error(result.error || 'Generation failed')
     }
 
-    // Generate project
-    const fileWriter = new FileWriter()
-    const templateRenderer = new TemplateRenderer()
-    const generator = new ProjectGenerator(fileWriter, templateRenderer)
-
-    await generator.generate(config, plugins)
+    outputPath = result.outputPath
 
     // Create zip file in memory
     const archive = archiver('zip', { zlib: { level: 9 } })
@@ -105,20 +78,20 @@ export async function POST(request: Request) {
     })
 
     // Add all files from the generated project
-    archive.directory(outputPath, projectName)
+    archive.directory(outputPath!, projectName)
     await archive.finalize()
 
     const zipBuffer = await archivePromise
 
-    // Clean up temp directory
+    // Clean up generated project directory
     try {
-      await fs.rm(tempDir, { recursive: true, force: true })
+      await fs.rm(outputPath!, { recursive: true, force: true })
     } catch (error) {
-      console.warn('Failed to cleanup temp directory:', error)
+      console.warn('Failed to cleanup output directory:', error)
     }
 
     // Return zip file as download
-    return new NextResponse(zipBuffer, {
+    return new NextResponse(new Uint8Array(zipBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
@@ -127,10 +100,10 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    // Clean up temp directory on error
-    if (tempDir) {
+    // Clean up on error
+    if (outputPath) {
       try {
-        await fs.rm(tempDir, { recursive: true, force: true })
+        await fs.rm(outputPath, { recursive: true, force: true })
       } catch {}
     }
 

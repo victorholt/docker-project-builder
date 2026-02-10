@@ -21,7 +21,7 @@ export async function POST(request: Request, context: DockerActionParams) {
 
     // Get the project path
     const projectPath = path.join(process.cwd(), '..', `${projectName}-output`)
-    const cliPath = path.join(projectPath, projectName)
+    const cliPath = path.join(projectPath, 'cli')
 
     // Build the command based on action
     let command: string

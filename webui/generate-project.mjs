@@ -11,10 +11,14 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Get arguments: node script.mjs projectName services
+// Get arguments: node script.mjs projectName services [domain] [environments] [ports]
 const args = process.argv.slice(2);
 const projectName = args[0] || 'test-project';
 const services = args[1] ? args[1].split(',') : ['nextjs', 'api', 'postgres'];
+const domain = args[2] || `${projectName}.local`;
+const environments = args[3] ? args[3].split(',') : ['local'];
+const userPorts = args[4] ? JSON.parse(args[4]) : null;
+
 const outputPath = path.join(__dirname, '..', `${projectName}-output`);
 
 try {
@@ -32,21 +36,44 @@ try {
     if (plugin) plugins.push(plugin);
   }
 
-  // Generate unique ports to avoid conflicts (random offset between 1000-9000)
-  const portOffset = Math.floor(Math.random() * 8000) + 1000;
-  const ports = {
-    nextjs: 3000 + portOffset,
-    api: 4000 + portOffset,
-  };
-  const proxyPort = 8080 + (portOffset % 1000); // Keep proxy port in 8xxx range
+  // Use user-provided ports or generate unique ports to avoid conflicts
+  let ports;
+  let proxyPort;
+
+  if (userPorts && Object.keys(userPorts).length > 0) {
+    ports = userPorts;
+    proxyPort = userPorts.proxy || 8080;
+  } else {
+    const portOffset = Math.floor(Math.random() * 8000) + 1000;
+    ports = {
+      nextjs: 3000 + portOffset,
+      api: 4000 + portOffset,
+    };
+    proxyPort = 8080 + (portOffset % 1000);
+  }
+
+  // Build config with proper category from plugin registry
+  const serviceConfigs = services.map(name => {
+    const plugin = registry.getPlugin(name);
+    return {
+      name,
+      version: 'latest',
+      category: plugin ? plugin.category : 'app',
+    };
+  });
+
+  // Always include proxy in service configs
+  if (!serviceConfigs.find(s => s.name === 'proxy')) {
+    serviceConfigs.push({ name: 'proxy', version: 'latest', category: 'proxy' });
+  }
 
   const config = {
     projectName,
     containerPrefix: projectName,
-    domain: `${projectName}.local`,
-    services: services.map(name => ({ name, version: 'latest', enabled: true })),
-    environments: ['local'],
-    proxy: { enabled: true, type: 'path-based', port: proxyPort, sslPort: proxyPort + 363 },
+    domain,
+    services: serviceConfigs,
+    environments,
+    proxy: { port: proxyPort, sslPort: proxyPort + 363, vhostMode: 'path' },
     ports,
     outputPath,
   };

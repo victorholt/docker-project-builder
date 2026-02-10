@@ -27,6 +27,11 @@ export class ComposeBuilder {
     // Build docker-compose.override.yml (dev)
     await this.buildOverrideCompose(composeDir, config, plugins);
 
+    // Build docker-compose.staging.yml (staging)
+    if (config.environments.includes('staging')) {
+      await this.buildStagingCompose(composeDir, config, plugins);
+    }
+
     // Build docker-compose.prod.yml (production)
     if (config.environments.includes('prod')) {
       await this.buildProdCompose(composeDir, config, plugins);
@@ -128,6 +133,43 @@ export class ComposeBuilder {
   }
 
   /**
+   * Builds the docker-compose.staging.yml (staging overrides)
+   * Reuses prod plugin blocks + adds certbot service
+   */
+  private async buildStagingCompose(
+    composeDir: string,
+    config: ProjectConfig,
+    plugins: IServicePlugin[]
+  ): Promise<void> {
+    const services: Record<string, unknown> = {};
+
+    // Reuse prod blocks for staging (same infrastructure, different env vars)
+    for (const plugin of plugins) {
+      const prodBlock = plugin.getComposeProd(config);
+      if (prodBlock) {
+        const { serviceName, ...serviceDefinition } = prodBlock;
+        services[serviceName] = serviceDefinition;
+      }
+    }
+
+    // Add certbot service for Let's Encrypt
+    this.addCertbotService(services, config);
+
+    // Build compose object
+    const composeContent: Record<string, unknown> = {
+      version: '3.9',
+      services,
+      volumes: {
+        'certbot-webroot': { driver: 'local' },
+      },
+    };
+
+    const yamlContent = YAML.stringify(composeContent);
+    const filePath = join(composeDir, 'docker-compose.staging.yml');
+    await this.fileWriter.writeFile(filePath, yamlContent);
+  }
+
+  /**
    * Builds the docker-compose.prod.yml (production overrides)
    */
   private async buildProdCompose(
@@ -135,7 +177,7 @@ export class ComposeBuilder {
     config: ProjectConfig,
     plugins: IServicePlugin[]
   ): Promise<void> {
-    const services: Record<string, Omit<ComposeServiceBlock, 'serviceName'>> = {};
+    const services: Record<string, unknown> = {};
 
     // Collect prod blocks from all plugins
     for (const plugin of plugins) {
@@ -146,22 +188,40 @@ export class ComposeBuilder {
       }
     }
 
-    // Only create file if there are prod configs
+    // Add certbot service for Let's Encrypt
+    this.addCertbotService(services, config);
+
+    // Only create file if there are services
     if (Object.keys(services).length === 0) {
       return;
     }
 
     // Build compose object
-    const composeContent = {
+    const composeContent: Record<string, unknown> = {
       version: '3.9',
       services,
+      volumes: {
+        'certbot-webroot': { driver: 'local' },
+      },
     };
 
-    // Convert to YAML
     const yamlContent = YAML.stringify(composeContent);
-
-    // Write file
     const filePath = join(composeDir, 'docker-compose.prod.yml');
     await this.fileWriter.writeFile(filePath, yamlContent);
+  }
+
+  /**
+   * Adds the certbot service for Let's Encrypt certificate management
+   */
+  private addCertbotService(services: Record<string, unknown>, config: ProjectConfig): void {
+    services['certbot'] = {
+      image: 'certbot/certbot:latest',
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-certbot`,
+      volumes: [
+        '../../docker/ssl/letsencrypt:/etc/letsencrypt',
+        'certbot-webroot:/var/www/certbot',
+      ],
+      profiles: ['certbot'],
+    };
   }
 }

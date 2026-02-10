@@ -46,14 +46,11 @@ export class NextjsPlugin implements IServicePlugin {
         dockerfile: 'docker/images/nextjs.Dockerfile',
         target: 'development',
       },
-      container_name: `\${CONTAINER_PREFIX}-nextjs`,
-      volumes: [
-        `../../apps/nextjs:/app`,
-        `/app/node_modules`,  // Anonymous volume for node_modules
-      ],
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-nextjs`,
       environment: {
         NODE_ENV: 'development',
         NEXT_TELEMETRY_DISABLED: '1',
+        NEXT_PUBLIC_API_URL: `\${NEXT_PUBLIC_API_URL:-http://${config.domain}:${(config as any).ports?.api || 4000}}`,
       },
       networks: ['app-network'],
       restart: 'unless-stopped',
@@ -62,10 +59,14 @@ export class NextjsPlugin implements IServicePlugin {
   }
 
   getComposeOverride(config: ProjectConfig): ComposeServiceBlock | null {
-    // Dev: Hot reload, expose port for debugging
+    // Dev: Hot reload with host volume mounts
     return {
       serviceName: this.name,
-      ports: ['${NEXTJS_EXTERNAL_PORT}:3000'],
+      volumes: [
+        '../../apps/nextjs:/app',
+        '/app/node_modules',
+      ],
+      ports: [`\${NEXTJS_EXTERNAL_PORT:-${(config as any).ports?.nextjs || 3000}}:3000`],
       command: 'npm run dev',
     };
   }
@@ -166,7 +167,7 @@ exec "$@"
       NEXTJS_EXTERNAL_PORT: externalPort,
       NEXT_PUBLIC_API_URL: env === 'prod'
         ? `https://api.${config.domain}`
-        : `http://${config.domain}:${config.proxy.port}/api`,
+        : `http://${config.domain}:${(config as any).ports?.api || 4000}`,
     };
   }
 

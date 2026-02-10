@@ -1,14 +1,137 @@
-#!/usr/bin/env node
+#!/usr/bin/env bash
 
-/**
- * Docker Project Builder CLI wrapper
- * This is a convenience script to run dpb from the project root
- */
+#
+# Docker Project Builder CLI wrapper
+# Automatically handles dependency installation and building
+#
 
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+set -e
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-import(join(__dirname, 'dist/index.js'));
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Helper functions
+info() {
+    echo -e "${BLUE}ℹ${NC} $1"
+}
+
+success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+warn() {
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+
+error() {
+    echo -e "${RED}✗${NC} $1"
+}
+
+# Check if node_modules exists
+check_dependencies() {
+    if [ ! -d "$SCRIPT_DIR/node_modules" ]; then
+        return 1
+    fi
+    return 0
+}
+
+# Check if dist folder exists with index.js
+check_build() {
+    if [ ! -f "$SCRIPT_DIR/dist/index.js" ]; then
+        return 1
+    fi
+    return 0
+}
+
+# Install dependencies
+install_dependencies() {
+    info "Installing dependencies..."
+    cd "$SCRIPT_DIR"
+    npm install
+    success "Dependencies installed"
+}
+
+# Build the project
+build_project() {
+    info "Building project..."
+    cd "$SCRIPT_DIR"
+    npm run build
+    success "Build complete"
+}
+
+# Check if webui dependencies are installed
+check_webui_dependencies() {
+    if [ ! -d "$SCRIPT_DIR/webui/node_modules" ]; then
+        return 1
+    fi
+    return 0
+}
+
+# Install webui dependencies
+install_webui_dependencies() {
+    info "Installing WebUI dependencies..."
+    cd "$SCRIPT_DIR/webui"
+    npm install
+    success "WebUI dependencies installed"
+}
+
+# Main setup check
+ensure_ready() {
+    local needs_setup=false
+
+    # Check main dependencies
+    if ! check_dependencies; then
+        warn "node_modules not found"
+        needs_setup=true
+        install_dependencies
+    fi
+
+    # Check if built
+    if ! check_build; then
+        warn "dist/index.js not found"
+        needs_setup=true
+        build_project
+    fi
+
+    if [ "$needs_setup" = true ]; then
+        echo ""
+        success "Setup complete!"
+        echo ""
+    fi
+}
+
+# Special handling for webui command
+handle_webui() {
+    if ! check_webui_dependencies; then
+        warn "WebUI dependencies not found"
+        install_webui_dependencies
+        echo ""
+    fi
+}
+
+# Main execution
+main() {
+    # Always ensure main project is ready
+    ensure_ready
+
+    # Check if this is a webui command
+    for arg in "$@"; do
+        if [ "$arg" = "webui" ]; then
+            handle_webui
+            break
+        fi
+    done
+
+    # Run the CLI
+    cd "$SCRIPT_DIR"
+    node dist/index.js "$@"
+}
+
+main "$@"

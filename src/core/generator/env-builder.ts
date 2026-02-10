@@ -21,6 +21,11 @@ export class EnvBuilder {
     // Build .env.example (template)
     await this.buildEnvFile(outputPath, config, plugins, 'local', '.env.example');
 
+    // Build .env.staging.example (staging template)
+    if (config.environments.includes('staging')) {
+      await this.buildEnvFile(outputPath, config, plugins, 'staging', '.env.staging.example');
+    }
+
     // Build .env.production.example (production template)
     if (config.environments.includes('prod')) {
       await this.buildEnvFile(outputPath, config, plugins, 'prod', '.env.production.example');
@@ -43,7 +48,7 @@ export class EnvBuilder {
     sections.push(this.buildHeader(config, env));
 
     // Global config section
-    sections.push(this.buildGlobalSection(config));
+    sections.push(this.buildGlobalSection(config, env));
 
     // Collect env vars from all plugins
     for (const plugin of plugins) {
@@ -75,9 +80,10 @@ export class EnvBuilder {
   /**
    * Builds the global configuration section
    */
-  private buildGlobalSection(config: ProjectConfig): string {
+  private buildGlobalSection(config: ProjectConfig, env: Environment): string {
     const lines: string[] = [
       '# ===== Global Configuration =====',
+      `APP_ENV=${env}`,
       `PROJECT_NAME=${config.projectName}`,
       `CONTAINER_PREFIX=${config.containerPrefix}`,
       `DOMAIN=${config.domain}`,

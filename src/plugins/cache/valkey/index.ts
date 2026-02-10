@@ -31,7 +31,7 @@ export class ValkeyPlugin implements IServicePlugin {
     return {
       serviceName: this.name,
       image: `valkey/valkey:${this.defaultVersion}`,
-      container_name: `\${CONTAINER_PREFIX}-valkey`,
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-valkey`,
       command: 'valkey-server --appendonly yes',
       volumes: [
         'valkey_data:/data',

@@ -36,11 +36,7 @@ export class ExpressjsPlugin implements IServicePlugin {
         dockerfile: 'docker/images/api.Dockerfile',
         target: 'development',
       },
-      container_name: `\${CONTAINER_PREFIX}-api`,
-      volumes: [
-        `../../apps/api:/app`,
-        `/app/node_modules`,
-      ],
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-api`,
       environment: {
         NODE_ENV: 'development',
         PORT: '4000',
@@ -54,7 +50,11 @@ export class ExpressjsPlugin implements IServicePlugin {
   getComposeOverride(config: ProjectConfig): ComposeServiceBlock | null {
     return {
       serviceName: this.name,
-      ports: ['${API_EXTERNAL_PORT}:4000'],
+      volumes: [
+        '../../apps/api:/app',
+        '/app/node_modules',
+      ],
+      ports: [`\${API_EXTERNAL_PORT:-${(config as any).ports?.api || 4000}}:4000`],
       command: 'npm run dev',
     };
   }
