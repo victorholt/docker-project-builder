@@ -89,6 +89,12 @@ export class EnvBuilder {
       `DOMAIN=${config.domain}`,
       `PROXY_PORT=${config.proxy.port}`,
       `PROXY_SSL_PORT=${config.proxy.sslPort}`,
+      '',
+      '# Docker Compose profiles (comma-separated: db,certbot,auto-renew,tools)',
+      `COMPOSE_PROFILES=${env === 'local' ? 'local' : ''}`,
+      '',
+      '# Let\'s Encrypt certificate email (required for staging/prod SSL)',
+      `CERT_EMAIL=${env === 'prod' || env === 'staging' ? 'admin@' + config.domain : ''}`,
     ];
 
     return lines.join('\n');

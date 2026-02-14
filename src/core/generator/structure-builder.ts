@@ -40,6 +40,9 @@ export class StructureBuilder {
       await this.createDirectory(appDir);
       await this.createGitkeep(appDir);
     }
+
+    // Create VERSION file
+    await this.fileWriter.writeFile(join(outputPath, 'VERSION'), '0.0.0\n');
   }
 
   /**

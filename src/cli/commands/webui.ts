@@ -13,7 +13,7 @@ const __dirname = dirname(__filename);
 
 export const webuiCommand = new Command('webui')
   .description('Install and run the Web UI for Docker Project Builder')
-  .option('-p, --port <port>', 'Port to run the web UI on', '3000')
+  .option('-p, --port <port>', 'Port to run the web UI on', '3100')
   .option('--install-only', 'Only install dependencies, do not start the server')
   .action(async (options) => {
     try {
@@ -62,11 +62,10 @@ export const webuiCommand = new Command('webui')
       console.log(`   Open http://localhost:${options.port} in your browser\n`);
       console.log('   Press Ctrl+C to stop the server\n');
 
-      const env = { ...process.env, PORT: options.port };
-      const devServer = spawn('npm', ['run', 'dev'], {
+      const devServer = spawn('npx', ['next', 'dev', '-p', options.port], {
         cwd: webuiDir,
         stdio: 'inherit',
-        env,
+        env: process.env,
         shell: true,
       });
 

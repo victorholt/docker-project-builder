@@ -152,15 +152,18 @@ export class ComposeBuilder {
       }
     }
 
-    // Add certbot service for Let's Encrypt
+    // Add certbot services for Let's Encrypt
     this.addCertbotService(services, config);
+    this.addCertbotRenewService(services, config);
 
     // Build compose object
     const composeContent: Record<string, unknown> = {
       version: '3.9',
       services,
       volumes: {
-        'certbot-webroot': { driver: 'local' },
+        'ssl-certs': { driver: 'local' },
+        'letsencrypt-data': { driver: 'local' },
+        'acme-challenge': { driver: 'local' },
       },
     };
 
@@ -188,8 +191,9 @@ export class ComposeBuilder {
       }
     }
 
-    // Add certbot service for Let's Encrypt
+    // Add certbot services for Let's Encrypt
     this.addCertbotService(services, config);
+    this.addCertbotRenewService(services, config);
 
     // Only create file if there are services
     if (Object.keys(services).length === 0) {
@@ -201,7 +205,9 @@ export class ComposeBuilder {
       version: '3.9',
       services,
       volumes: {
-        'certbot-webroot': { driver: 'local' },
+        'ssl-certs': { driver: 'local' },
+        'letsencrypt-data': { driver: 'local' },
+        'acme-challenge': { driver: 'local' },
       },
     };
 
@@ -218,10 +224,48 @@ export class ComposeBuilder {
       image: 'certbot/certbot:latest',
       container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-certbot`,
       volumes: [
-        '../../docker/ssl/letsencrypt:/etc/letsencrypt',
-        'certbot-webroot:/var/www/certbot',
+        'letsencrypt-data:/etc/letsencrypt',
+        'ssl-certs:/etc/ssl-output',
+        'acme-challenge:/var/www/certbot',
       ],
       profiles: ['certbot'],
+      networks: ['app-network'],
+    };
+  }
+
+  /**
+   * Adds the certbot-renew service for automatic certificate renewal
+   */
+  private addCertbotRenewService(services: Record<string, unknown>, config: ProjectConfig): void {
+    services['certbot-renew'] = {
+      image: 'certbot/certbot:latest',
+      container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-certbot-renew`,
+      entrypoint: 'sh',
+      command: [
+        '-c',
+        [
+          'echo "Certbot auto-renewal service started (checks every 12h)"',
+          'trap exit TERM INT',
+          'while true; do',
+          '  sleep 43200 &',
+          '  wait $$!',
+          '  echo "[`date`] Running certbot renew..."',
+          '  certbot renew --webroot -w /var/www/certbot \\',
+          '    --deploy-hook "cp -L /etc/letsencrypt/live/$$DOMAIN/fullchain.pem /etc/ssl-output/$$DOMAIN.crt && cp -L /etc/letsencrypt/live/$$DOMAIN/privkey.pem /etc/ssl-output/$$DOMAIN.key && cp -L /etc/letsencrypt/live/$$DOMAIN/chain.pem /etc/ssl-output/ca.crt && echo Certificates renewed and copied"',
+          'done',
+        ].join('\n'),
+      ],
+      environment: {
+        'DOMAIN': `\${DOMAIN:?DOMAIN must be set}`,
+      },
+      volumes: [
+        'letsencrypt-data:/etc/letsencrypt',
+        'ssl-certs:/etc/ssl-output',
+        'acme-challenge:/var/www/certbot',
+      ],
+      profiles: ['auto-renew'],
+      networks: ['app-network'],
+      restart: 'unless-stopped',
     };
   }
 }

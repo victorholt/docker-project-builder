@@ -44,6 +44,8 @@ export class ApacheProxyPlugin implements IServicePlugin {
         '../../docker/proxy/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro',
         '../../docker/proxy/httpd-vhosts.conf:/usr/local/apache2/conf/vhosts/httpd-vhosts.conf:ro',
         '../../docker/ssl:/usr/local/apache2/conf/ssl:ro',
+        '../../docker/proxy/httpd.conf.template:/usr/local/apache2/conf/templates/httpd.conf.template:ro',
+        '../../docker/proxy/httpd-vhosts.conf.template:/usr/local/apache2/conf/templates/httpd-vhosts.conf.template:ro',
       ],
       networks: ['app-network'],
       depends_on: this.getAppServiceDependencies(config),
@@ -59,12 +61,19 @@ export class ApacheProxyPlugin implements IServicePlugin {
   }
 
   getComposeProd(config: ProjectConfig): ComposeServiceBlock | null {
-    // In prod, use prod vhosts configuration + certbot webroot volume
+    // In prod, use named volumes for SSL and ACME; entrypoint does envsubst from templates
     return {
       serviceName: 'proxy',
+      environment: {
+        'DOMAIN': `\${DOMAIN:?DOMAIN must be set in .env}`,
+      },
+      ports: [
+        '80:80',
+        '443:443',
+      ],
       volumes: [
-        '../../docker/proxy/httpd-vhosts-prod.conf:/usr/local/apache2/conf/vhosts/httpd-vhosts.conf:ro',
-        'certbot-webroot:/usr/local/apache2/htdocs',
+        'ssl-certs:/usr/local/apache2/conf/ssl:ro',
+        'acme-challenge:/usr/local/apache2/htdocs',
       ],
     };
   }
@@ -73,7 +82,9 @@ export class ApacheProxyPlugin implements IServicePlugin {
     return `# Apache HTTP Server with proxy modules
 FROM httpd:${this.defaultVersion}
 
-# Install required modules (most are already included)
+# Install envsubst for config templating
+RUN apk add --no-cache gettext
+
 # Enable proxy modules
 RUN sed -i 's/#LoadModule proxy_module/LoadModule proxy_module/' /usr/local/apache2/conf/httpd.conf && \\
     sed -i 's/#LoadModule proxy_http_module/LoadModule proxy_http_module/' /usr/local/apache2/conf/httpd.conf && \\
@@ -81,10 +92,15 @@ RUN sed -i 's/#LoadModule proxy_module/LoadModule proxy_module/' /usr/local/apac
     sed -i 's/#LoadModule ssl_module/LoadModule ssl_module/' /usr/local/apache2/conf/httpd.conf && \\
     sed -i 's/#LoadModule socache_shmcb_module/LoadModule socache_shmcb_module/' /usr/local/apache2/conf/httpd.conf
 
-# Create vhosts config directory
+# Create directories
 RUN mkdir -p /usr/local/apache2/conf/vhosts && \\
     mkdir -p /usr/local/apache2/conf/ssl && \\
+    mkdir -p /usr/local/apache2/conf/templates && \\
     mkdir -p /usr/local/apache2/htdocs/.well-known/acme-challenge
+
+# Copy config templates (used in production via envsubst)
+COPY docker/proxy/httpd.conf.template /usr/local/apache2/conf/templates/httpd.conf.template
+COPY docker/proxy/httpd-vhosts.conf.template /usr/local/apache2/conf/templates/httpd-vhosts.conf.template
 
 # Copy entrypoint script
 COPY docker/scripts/proxy-entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -101,7 +117,38 @@ CMD ["httpd-foreground"]
     return `#!/bin/sh
 set -e
 
-# Wait for app services to be ready (optional, helps with startup)
+# If DOMAIN is set (production/staging), generate configs from templates via envsubst.
+# In local dev, the override compose file volume-mounts the hardcoded configs instead.
+if [ -n "$DOMAIN" ]; then
+    echo "Generating Apache config for domain: \${DOMAIN}"
+    # Whitelist only \${DOMAIN} so Apache's own %{HTTP_HOST}, %{REQUEST_URI} etc. are preserved
+    envsubst '\${DOMAIN}' \\
+        < /usr/local/apache2/conf/templates/httpd.conf.template \\
+        > /usr/local/apache2/conf/httpd.conf
+    envsubst '\${DOMAIN}' \\
+        < /usr/local/apache2/conf/templates/httpd-vhosts.conf.template \\
+        > /usr/local/apache2/conf/vhosts/httpd-vhosts.conf
+fi
+
+# Watch for certificate changes and gracefully reload Apache
+if [ -n "$DOMAIN" ]; then
+    (
+        CERT="/usr/local/apache2/conf/ssl/\${DOMAIN}.crt"
+        LAST_MOD=""
+        while true; do
+            sleep 3600
+            if [ -f "$CERT" ]; then
+                CURRENT_MOD=$(stat -c %Y "$CERT" 2>/dev/null || true)
+                if [ -n "$LAST_MOD" ] && [ -n "$CURRENT_MOD" ] && [ "$CURRENT_MOD" != "$LAST_MOD" ]; then
+                    echo "[\$(date)] Certificate change detected, reloading Apache..."
+                    httpd -k graceful
+                fi
+                LAST_MOD="$CURRENT_MOD"
+            fi
+        done
+    ) &
+fi
+
 echo "Starting Apache proxy..."
 
 # Execute the main command
@@ -117,13 +164,12 @@ exec "$@"
   }
 
   getVolumes(config: ProjectConfig): VolumeDefinition[] {
-    // certbot-webroot is used in staging/prod for Let's Encrypt ACME challenges
+    // Named volumes for SSL, Let's Encrypt, and ACME challenges (staging/prod)
     if (config.environments.includes('staging') || config.environments.includes('prod')) {
       return [
-        {
-          name: 'certbot-webroot',
-          driver: 'local',
-        },
+        { name: 'ssl-certs', driver: 'local' },
+        { name: 'letsencrypt-data', driver: 'local' },
+        { name: 'acme-challenge', driver: 'local' },
       ];
     }
     return [];

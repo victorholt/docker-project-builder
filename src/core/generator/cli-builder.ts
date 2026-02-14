@@ -18,10 +18,10 @@ export class CLIBuilder {
     const commandsDir = join(cliDir, 'commands');
 
     // Build main CLI entry point
-    await this.buildMainCLI(outputPath, projectName);
+    await this.buildMainCLI(outputPath, projectName, config);
 
     // Build common utility functions
-    await this.buildCommonUtilities(cliDir);
+    await this.buildCommonUtilities(cliDir, config);
 
     // Build standard commands
     await this.buildStandardCommands(commandsDir, config);
@@ -33,7 +33,110 @@ export class CLIBuilder {
   /**
    * Builds the main CLI entry point (./cli)
    */
-  private async buildMainCLI(outputPath: string, projectName: string): Promise<void> {
+  private async buildMainCLI(outputPath: string, projectName: string, config: ProjectConfig): Promise<void> {
+    // Determine which conditional commands are available
+    const hasAppPlugins = config.services.some((s) => s.category === 'app');
+    const hasDbPlugins = config.services.some((s) => s.category === 'database');
+
+    // Build help text conditionally
+    const helpCommands: string[] = [
+      '    up          Start all containers',
+      '    down        Stop and remove containers',
+      '    clean       Remove containers, volumes, and local images',
+      '    build       Build or rebuild containers',
+      '    logs        View container logs',
+      '    exec        Execute a command in a container',
+      '    shell       Open a shell in a container',
+      '    status      Show container status',
+      '    restart     Restart containers',
+      '    deploy      Guided deployment wizard',
+      '    env         Interactive environment configuration',
+      '    version     View or bump project version',
+    ];
+
+    if (hasAppPlugins) {
+      helpCommands.push('    install     Install dependencies in app containers');
+      helpCommands.push('    typecheck   Run TypeScript type checking');
+    }
+    if (hasDbPlugins) {
+      helpCommands.push('    db          Database management commands');
+    }
+
+    helpCommands.push("    certs       Generate SSL certificates (self-signed or Let's Encrypt)");
+    helpCommands.push("    certs-renew Renew Let's Encrypt certificates");
+    helpCommands.push('    help        Show this help message');
+
+    const helpText = helpCommands.join('\n');
+
+    // Build dispatcher cases conditionally
+    const dispatchCases: string[] = [
+      '    up)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/up.sh"',
+      '        ;;',
+      '    down)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/down.sh"',
+      '        ;;',
+      '    clean)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/clean.sh"',
+      '        ;;',
+      '    build)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/build.sh"',
+      '        ;;',
+      '    logs)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/logs.sh"',
+      '        ;;',
+      '    exec)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/exec.sh"',
+      '        ;;',
+      '    shell)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/shell.sh"',
+      '        ;;',
+      '    status)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/status.sh"',
+      '        ;;',
+      '    restart)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/restart.sh"',
+      '        ;;',
+      '    deploy)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/deploy.sh"',
+      '        ;;',
+      '    env)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/env.sh"',
+      '        ;;',
+      '    version)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/version.sh"',
+      '        ;;',
+    ];
+
+    if (hasAppPlugins) {
+      dispatchCases.push(
+        '    install)',
+        '        source "${SCRIPT_DIR}/bin/cli/commands/install.sh"',
+        '        ;;',
+        '    typecheck)',
+        '        source "${SCRIPT_DIR}/bin/cli/commands/typecheck.sh"',
+        '        ;;',
+      );
+    }
+    if (hasDbPlugins) {
+      dispatchCases.push(
+        '    db)',
+        '        source "${SCRIPT_DIR}/bin/cli/commands/db.sh"',
+        '        ;;',
+      );
+    }
+
+    dispatchCases.push(
+      '    certs)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/certs.sh"',
+      '        ;;',
+      '    certs-renew)',
+      '        source "${SCRIPT_DIR}/bin/cli/commands/certs-renew.sh"',
+      '        ;;',
+    );
+
+    const dispatchText = dispatchCases.join('\n');
+
     const content = `#!/usr/bin/env bash
 
 # ${projectName} CLI Tool
@@ -48,33 +151,36 @@ PROJECT_ROOT="\${SCRIPT_DIR}"
 # Source common utilities
 source "\${SCRIPT_DIR}/bin/cli/common.sh"
 
+# Extract --env flag from any position in arguments
+REMAINING_ARGS=()
+for arg in "$@"; do
+    case "\$arg" in
+        --env=*)
+            export APP_ENV="\${arg#*=}"
+            ;;
+        *)
+            REMAINING_ARGS+=("\$arg")
+            ;;
+    esac
+done
+set -- "\${REMAINING_ARGS[@]}"
+
 show_help() {
     cat << EOF
 ${projectName} CLI - Docker Project Management Tool
 
-Usage: ./cli [command] [options]
+Usage: ./cli [--env=<local|staging|prod>] [command] [options]
 
 Commands:
-    up          Start all containers
-    down        Stop and remove containers
-    clean       Remove containers, volumes, and local images
-    build       Build or rebuild containers
-    logs        View container logs
-    exec        Execute a command in a container
-    shell       Open a shell in a container
-    status      Show container status
-    restart     Restart containers
-    certs       Generate SSL certificates (self-signed or Let's Encrypt)
-    certs-renew Renew Let's Encrypt certificates
-    help        Show this help message
+${helpText}
 
 Examples:
     ./cli up
+    ./cli --env=prod up
     ./cli logs api
     ./cli shell nextjs
-    ./cli exec api npm install
+    ./cli deploy
     ./cli certs
-    ./cli certs-renew
 
 EOF
 }
@@ -84,39 +190,7 @@ COMMAND="\${1:-help}"
 shift || true
 
 case "\${COMMAND}" in
-    up)
-        source "\${SCRIPT_DIR}/bin/cli/commands/up.sh"
-        ;;
-    down)
-        source "\${SCRIPT_DIR}/bin/cli/commands/down.sh"
-        ;;
-    clean)
-        source "\${SCRIPT_DIR}/bin/cli/commands/clean.sh"
-        ;;
-    build)
-        source "\${SCRIPT_DIR}/bin/cli/commands/build.sh"
-        ;;
-    logs)
-        source "\${SCRIPT_DIR}/bin/cli/commands/logs.sh"
-        ;;
-    exec)
-        source "\${SCRIPT_DIR}/bin/cli/commands/exec.sh"
-        ;;
-    shell)
-        source "\${SCRIPT_DIR}/bin/cli/commands/shell.sh"
-        ;;
-    status)
-        source "\${SCRIPT_DIR}/bin/cli/commands/status.sh"
-        ;;
-    restart)
-        source "\${SCRIPT_DIR}/bin/cli/commands/restart.sh"
-        ;;
-    certs)
-        source "\${SCRIPT_DIR}/bin/cli/commands/certs.sh"
-        ;;
-    certs-renew)
-        source "\${SCRIPT_DIR}/bin/cli/commands/certs-renew.sh"
-        ;;
+${dispatchText}
     help|--help|-h)
         show_help
         ;;
@@ -137,7 +211,30 @@ esac
   /**
    * Builds common utility functions used by all commands
    */
-  private async buildCommonUtilities(cliDir: string): Promise<void> {
+  private async buildCommonUtilities(cliDir: string, config: ProjectConfig): Promise<void> {
+    // Build check_all_ports based on what port env vars exist
+    const portChecks: string[] = [];
+    for (const service of config.services) {
+      if (service.category === 'app') {
+        const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
+        const defaultPort = (service.config?.port as number) || 3000;
+        portChecks.push(`    check_port "\${${portVar}:-${defaultPort}}" "${service.name.toUpperCase()}" "${portVar}" || ok=false`);
+      } else if (service.category === 'database') {
+        const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
+        const defaultPort = (service.config?.port as number) || 5432;
+        portChecks.push(`    check_port "\${${portVar}:-${defaultPort}}" "${service.name.toUpperCase()}" "${portVar}" || ok=false`);
+      } else if (service.category === 'cache') {
+        const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
+        const defaultPort = (service.config?.port as number) || 6379;
+        portChecks.push(`    check_port "\${${portVar}:-${defaultPort}}" "${service.name.toUpperCase()}" "${portVar}" || ok=false`);
+      }
+    }
+    // Always check proxy ports
+    portChecks.push(`    check_port "\${PROXY_PORT:-${config.proxy.port}}" "PROXY" "PROXY_PORT" || ok=false`);
+    portChecks.push(`    check_port "\${PROXY_SSL_PORT:-${config.proxy.sslPort}}" "PROXY_SSL" "PROXY_SSL_PORT" || ok=false`);
+
+    const portChecksText = portChecks.join('\n');
+
     const content = `#!/usr/bin/env bash
 
 # Common utilities for CLI commands
@@ -151,19 +248,19 @@ NC='\\033[0m' # No Color
 
 # Logging functions
 info() {
-    echo -e "\${BLUE}ℹ\${NC} $*"
+    echo -e "\${BLUE}\\xe2\\x84\\xb9\${NC} $*"
 }
 
 success() {
-    echo -e "\${GREEN}✓\${NC} $*"
+    echo -e "\${GREEN}\\xe2\\x9c\\x93\${NC} $*"
 }
 
 warning() {
-    echo -e "\${YELLOW}⚠\${NC} $*"
+    echo -e "\${YELLOW}\\xe2\\x9a\\xa0\${NC} $*"
 }
 
 error() {
-    echo -e "\${RED}✗\${NC} $*" >&2
+    echo -e "\${RED}\\xe2\\x9c\\x97\${NC} $*" >&2
 }
 
 # Docker Compose wrapper (environment-aware)
@@ -217,6 +314,90 @@ load_env() {
     fi
 }
 
+# Update or add a key=value in the .env file
+# Usage: set_env_var <KEY> <VALUE>
+set_env_var() {
+    local key="$1"
+    local value="$2"
+    local env_file="\${PROJECT_ROOT}/.env"
+
+    if [ ! -f "\$env_file" ]; then
+        echo "\${key}=\${value}" > "\$env_file"
+        return
+    fi
+
+    if grep -q "^\${key}=" "\$env_file" 2>/dev/null; then
+        # Update existing key (macOS-compatible sed)
+        sed -i '' "s|^\${key}=.*|\${key}=\${value}|" "\$env_file"
+    else
+        # Append new key
+        echo "\${key}=\${value}" >> "\$env_file"
+    fi
+}
+
+# Check if a port is available. If in use, prompt the user for a new port.
+# Skips ports held by our own project containers.
+# Usage: check_port <port> <SERVICE_NAME> <ENV_VAR_NAME>
+check_port() {
+    local port="$1"
+    local service="$2"
+    local env_var="$3"
+    local prefix="\${CONTAINER_PREFIX:-${config.containerPrefix}}"
+    local pid
+
+    pid=\$(lsof -ti :"\$port" 2>/dev/null)
+    if [ -z "\$pid" ]; then
+        return 0
+    fi
+
+    # If the port is held by one of our own running containers, that's fine
+    local container
+    container=\$(docker ps --filter "publish=\$port" --filter "name=\${prefix}-" --format '{{.Names}}' 2>/dev/null)
+    if [ -n "\$container" ]; then
+        return 0
+    fi
+
+    local owner
+    owner=\$(lsof -i :"\$port" -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print \$1}')
+    warning "Port \$port (\$service) is already in use by \${owner:-unknown}"
+
+    # Prompt for a new port
+    while true; do
+        read -r -p "  Enter a new port for \$service (or 'q' to abort): " new_port
+        if [ "\$new_port" = "q" ]; then
+            return 1
+        fi
+        # Validate it's a number
+        if ! [[ "\$new_port" =~ ^[0-9]+$ ]]; then
+            error "  Invalid port number"
+            continue
+        fi
+        # Check the new port is free
+        if lsof -ti :"\$new_port" > /dev/null 2>&1; then
+            error "  Port \$new_port is also in use"
+            continue
+        fi
+        # Good - save to .env and export for this session
+        set_env_var "\$env_var" "\$new_port"
+        export "\$env_var=\$new_port"
+        success "  \$service port set to \$new_port (saved to .env)"
+        return 0
+    done
+}
+
+# Check all project ports for conflicts, prompting to fix any that are in use.
+check_all_ports() {
+    local ok=true
+${portChecksText}
+
+    if [ "\$ok" = false ]; then
+        echo ""
+        error "Aborting due to unresolved port conflicts."
+        return 1
+    fi
+    return 0
+}
+
 # Get list of service names
 get_services() {
     dc config --services
@@ -238,7 +419,7 @@ service_exists() {
    */
   private async buildStandardCommands(commandsDir: string, config: ProjectConfig): Promise<void> {
     // up command
-    await this.buildUpCommand(commandsDir);
+    await this.buildUpCommand(commandsDir, config);
 
     // down command
     await this.buildDownCommand(commandsDir);
@@ -264,23 +445,65 @@ service_exists() {
     // restart command
     await this.buildRestartCommand(commandsDir);
 
+    // deploy command
+    await this.buildDeployCommand(commandsDir, config);
+
+    // env command
+    await this.buildEnvCommand(commandsDir, config);
+
+    // version command
+    await this.buildVersionCommand(commandsDir);
+
     // certs command
     await this.buildCertsCommand(commandsDir, config);
 
     // certs-renew command
     await this.buildCertsRenewCommand(commandsDir, config);
+
+    // Conditional commands based on plugin categories
+    const hasAppPlugins = config.services.some((s) => s.category === 'app');
+    const hasDbPlugins = config.services.some((s) => s.category === 'database');
+
+    if (hasAppPlugins) {
+      await this.buildInstallCommand(commandsDir, config);
+      await this.buildTypecheckCommand(commandsDir, config);
+    }
+    if (hasDbPlugins) {
+      await this.buildDbCommand(commandsDir, config);
+    }
   }
 
   /**
    * Builds the 'up' command
    */
-  private async buildUpCommand(commandsDir: string): Promise<void> {
+  private async buildUpCommand(commandsDir: string, config: ProjectConfig): Promise<void> {
     const content = `#!/usr/bin/env bash
 
 # Start all containers
 
 check_docker
 load_env
+
+ENV="\${APP_ENV:-local}"
+
+# Force-remove stale containers (Created/Exited) to prevent port conflicts.
+PREFIX="\${CONTAINER_PREFIX:-${config.containerPrefix}}"
+stale=\$(docker ps -a --filter "name=\${PREFIX}-" --filter "status=created" --filter "status=exited" -q 2>/dev/null)
+if [ -n "\$stale" ]; then
+    warning "Removing stale containers to avoid port conflicts..."
+    docker rm -f \$stale 2>/dev/null
+fi
+
+# Check for port conflicts before starting (local only)
+if [ "\${ENV}" = "local" ]; then
+    check_all_ports || exit 1
+fi
+
+# In non-local environments, auto-build production images before starting
+if [ "\${ENV}" != "local" ]; then
+    info "Environment: \${ENV} -- building production images..."
+    dc build
+fi
 
 info "Starting containers..."
 dc up -d "$@"
@@ -513,6 +736,581 @@ fi
   }
 
   /**
+   * Builds the 'deploy' command (guided deployment wizard)
+   */
+  private async buildDeployCommand(commandsDir: string, config: ProjectConfig): Promise<void> {
+    const hasDbPlugins = config.services.some((s) => s.category === 'database');
+
+    // Build health check services list
+    const appServices = config.services.filter((s) => s.category === 'app').map((s) => s.name);
+    const healthCheckServices = ['proxy', ...appServices].join(' ');
+
+    // Build DB step conditionally
+    let dbStep = '';
+    if (hasDbPlugins) {
+      const dbServices = config.services.filter((s) => s.category === 'database').map((s) => s.name);
+      dbStep = `
+# ====================================================================
+# Step 5: Database Setup
+# ====================================================================
+step_header 5 "Database Setup"
+
+info "Push database schema (required on first deploy)"
+read -r -p "Run 'db push' now? [Y/n]: " do_db
+if [[ ! "\${do_db}" =~ ^[Nn]$ ]]; then
+    source "\${SCRIPT_DIR}/bin/cli/commands/db.sh" push
+    success "Database schema pushed!"
+else
+    info "Skipping database setup"
+    info "Run './cli db push' later to initialize the schema"
+fi
+`;
+    } else {
+      dbStep = `
+# ====================================================================
+# Step 5: Database Setup (skipped - no database plugins)
+# ====================================================================
+step_header 5 "Database Setup"
+info "No database plugins configured. Skipping."
+`;
+    }
+
+    const content = `#!/usr/bin/env bash
+
+# Guided deployment wizard
+# Usage: ./cli deploy
+
+show_deploy_help() {
+    echo "Guided Deployment Wizard"
+    echo ""
+    echo "Usage:"
+    echo "  ./cli deploy"
+    echo ""
+    echo "Walks through the full deployment process:"
+    echo "  1. Environment configuration (.env)"
+    echo "  2. Build Docker images"
+    echo "  3. Start containers"
+    echo "  4. Wait for services to be healthy"
+    echo "  5. Database setup"
+    echo "  6. SSL certificate setup"
+    echo ""
+}
+
+if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    show_deploy_help
+    exit 0
+fi
+
+check_docker
+
+# -- Helpers ---------------------------------------------------------
+step_header() {
+    local step_num="$1"
+    local step_name="$2"
+    echo ""
+    echo "---------------------------------------------"
+    echo "  Step \${step_num}: \${step_name}"
+    echo "---------------------------------------------"
+    echo ""
+}
+
+wait_for_healthy() {
+    local service="$1"
+    local max_wait="\${2:-120}"
+    local elapsed=0
+
+    while [ \$elapsed -lt \$max_wait ]; do
+        local state
+        state=\$(dc ps --format '{{.Health}}' "\${service}" 2>/dev/null || echo "unknown")
+        if echo "\${state}" | grep -qi "healthy"; then
+            return 0
+        fi
+        sleep 2
+        elapsed=\$((elapsed + 2))
+        printf "."
+    done
+    return 1
+}
+
+# ====================================================================
+# Step 1: Environment Configuration
+# ====================================================================
+step_header 1 "Environment Configuration"
+
+load_env
+ENV="\${APP_ENV:-local}"
+
+if [ -f "\${PROJECT_ROOT}/.env" ]; then
+    info "Current .env found (APP_ENV=\${ENV}, DOMAIN=\${DOMAIN:-not set})"
+    echo ""
+    read -r -p "Reconfigure .env? [y/N]: " reconfig
+    if [[ "\${reconfig}" =~ ^[Yy]$ ]]; then
+        source "\${SCRIPT_DIR}/bin/cli/commands/env.sh"
+        load_env
+        ENV="\${APP_ENV:-local}"
+    fi
+else
+    warning "No .env file found. Starting interactive setup..."
+    source "\${SCRIPT_DIR}/bin/cli/commands/env.sh"
+    load_env
+    ENV="\${APP_ENV:-local}"
+fi
+
+if [[ "\${ENV}" == "local" ]]; then
+    warning "APP_ENV is 'local'. For production deployment, set APP_ENV=prod in .env"
+    read -r -p "Continue anyway? [y/N]: " continue_local
+    if [[ ! "\${continue_local}" =~ ^[Yy]$ ]]; then
+        info "Run './cli env' to reconfigure"
+        exit 0
+    fi
+fi
+
+# ====================================================================
+# Step 2: Build Docker Images
+# ====================================================================
+step_header 2 "Build Docker Images"
+
+info "Building images for environment: \${ENV}"
+echo ""
+read -r -p "Build images now? [Y/n]: " do_build
+if [[ ! "\${do_build}" =~ ^[Nn]$ ]]; then
+    dc build
+    success "Images built successfully!"
+else
+    info "Skipping build (using existing images)"
+fi
+
+# ====================================================================
+# Step 3: Start Containers
+# ====================================================================
+step_header 3 "Start Containers"
+
+read -r -p "Start containers? [Y/n]: " do_start
+if [[ ! "\${do_start}" =~ ^[Nn]$ ]]; then
+    dc up -d
+    success "Containers started!"
+else
+    info "Skipping start"
+fi
+
+# ====================================================================
+# Step 4: Wait for Health
+# ====================================================================
+step_header 4 "Waiting for Services"
+
+SERVICES_TO_CHECK="${healthCheckServices}"
+
+all_healthy=true
+for svc in \${SERVICES_TO_CHECK}; do
+    printf "  Waiting for %s " "\${svc}"
+    if wait_for_healthy "\${svc}" 120; then
+        echo ""
+        success "\${svc} is healthy"
+    else
+        echo ""
+        warning "\${svc} did not become healthy within 120s"
+        all_healthy=false
+    fi
+done
+
+if [ "\${all_healthy}" = true ]; then
+    success "All services are healthy!"
+else
+    warning "Some services are not healthy. Check logs: ./cli logs"
+fi
+${dbStep}
+# ====================================================================
+# Step 6: SSL Certificates
+# ====================================================================
+step_header 6 "SSL Certificates"
+
+if [[ "\${ENV}" != "local" ]]; then
+    info "Domain: \${DOMAIN:-not set}"
+    info "Make sure DNS for \${DOMAIN:-your domain} points to this server"
+    echo ""
+    read -r -p "Request Let's Encrypt SSL certificate? [Y/n]: " do_certs
+    if [[ ! "\${do_certs}" =~ ^[Nn]$ ]]; then
+        source "\${SCRIPT_DIR}/bin/cli/commands/certs.sh"
+    else
+        info "Skipping SSL setup"
+        info "Run './cli certs' later to get SSL certificates"
+    fi
+else
+    info "Local environment -- run './cli certs' for self-signed certificates"
+fi
+
+# ====================================================================
+# Summary
+# ====================================================================
+echo ""
+echo "========================================="
+echo "  Deployment Complete"
+echo "========================================="
+echo ""
+
+dc ps
+
+echo ""
+if [[ "\${ENV}" != "local" && -n "\${DOMAIN:-}" ]]; then
+    PROTO="http"
+    if [ -f "\${PROJECT_ROOT}/docker/ssl/\${DOMAIN}.crt" ]; then
+        PROTO="https"
+    fi
+    success "Access your app: \${PROTO}://\${DOMAIN}"
+else
+    success "Access your app: http://\${DOMAIN:-localhost}:\${PROXY_PORT:-${config.proxy.port}}"
+fi
+
+echo ""
+info "Useful commands:"
+echo "  ./cli status          # Container status"
+echo "  ./cli logs            # View logs"
+echo "  ./cli restart         # Restart all services"
+echo "  ./cli certs           # Manage SSL certificates"
+echo "  ./cli certs-renew     # Renew Let's Encrypt certs"
+echo ""
+
+if [[ "\${ENV}" != "local" ]]; then
+    warning "Remember to set up auto-renewal for SSL certificates:"
+    echo "  COMPOSE_PROFILES=auto-renew ./cli up certbot-renew"
+    echo ""
+fi
+`;
+
+    await this.fileWriter.writeFile(join(commandsDir, 'deploy.sh'), content);
+  }
+
+  /**
+   * Builds the 'env' command (interactive .env configurator)
+   */
+  private async buildEnvCommand(commandsDir: string, config: ProjectConfig): Promise<void> {
+    // Build plugin-specific prompts
+    const pluginPrompts: string[] = [];
+
+    for (const service of config.services) {
+      if (service.category === 'database') {
+        const nameUpper = service.name.toUpperCase();
+        pluginPrompts.push(`
+echo ""
+info "${service.name} configuration"
+prompt ${nameUpper}_USER "${service.name} user" "\${${nameUpper}_USER:-${config.containerPrefix}_user}"
+prompt ${nameUpper}_PASSWORD "${service.name} password" "\${${nameUpper}_PASSWORD:-${config.containerPrefix}_pass}" true
+prompt ${nameUpper}_DB "${service.name} database" "\${${nameUpper}_DB:-${config.containerPrefix}_db}"
+`);
+      }
+    }
+
+    // Build port prompts for app services
+    const portPrompts: string[] = [];
+    for (const service of config.services) {
+      if (service.category === 'app') {
+        const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
+        const defaultPort = (service.config?.port as number) || 3000;
+        portPrompts.push(`prompt ${portVar} "${service.name} external port" "\${${portVar}:-${defaultPort}}"`);
+      } else if (service.category === 'database') {
+        const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
+        const defaultPort = (service.config?.port as number) || 5432;
+        portPrompts.push(`prompt ${portVar} "${service.name} external port" "\${${portVar}:-${defaultPort}}"`);
+      } else if (service.category === 'cache') {
+        const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
+        const defaultPort = (service.config?.port as number) || 6379;
+        portPrompts.push(`prompt ${portVar} "${service.name} external port" "\${${portVar}:-${defaultPort}}"`);
+      }
+    }
+    portPrompts.push(`prompt PROXY_PORT "Proxy HTTP port" "\${PROXY_PORT:-${config.proxy.port}}"`);
+    portPrompts.push(`prompt PROXY_SSL_PORT "Proxy HTTPS port" "\${PROXY_SSL_PORT:-${config.proxy.sslPort}}"`);
+
+    const portPromptsText = portPrompts.join('\n');
+    const pluginPromptsText = pluginPrompts.join('');
+
+    // Build env file write section for ports
+    const portEnvLines: string[] = [];
+    for (const service of config.services) {
+      if (service.category === 'app') {
+        const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
+        const defaultPort = (service.config?.port as number) || 3000;
+        portEnvLines.push(`${portVar}=\${${portVar}:-${defaultPort}}`);
+      } else if (service.category === 'database') {
+        const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
+        const defaultPort = (service.config?.port as number) || 5432;
+        portEnvLines.push(`${portVar}=\${${portVar}:-${defaultPort}}`);
+      } else if (service.category === 'cache') {
+        const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
+        const defaultPort = (service.config?.port as number) || 6379;
+        portEnvLines.push(`${portVar}=\${${portVar}:-${defaultPort}}`);
+      }
+    }
+    portEnvLines.push(`PROXY_PORT=\${PROXY_PORT:-${config.proxy.port}}`);
+    portEnvLines.push(`PROXY_SSL_PORT=\${PROXY_SSL_PORT:-${config.proxy.sslPort}}`);
+
+    const portEnvLinesText = portEnvLines.join('\n');
+
+    // Build db env section
+    const dbEnvLines: string[] = [];
+    for (const service of config.services) {
+      if (service.category === 'database') {
+        const nameUpper = service.name.toUpperCase();
+        dbEnvLines.push(`${nameUpper}_USER=\${${nameUpper}_USER}`);
+        dbEnvLines.push(`${nameUpper}_PASSWORD=\${${nameUpper}_PASSWORD}`);
+        dbEnvLines.push(`${nameUpper}_DB=\${${nameUpper}_DB}`);
+      }
+    }
+    const dbEnvLinesText = dbEnvLines.length > 0 ? `
+# -- Database -----------------------------------------------
+${dbEnvLines.join('\n')}
+` : '';
+
+    const hasDbPlugins = config.services.some((s) => s.category === 'database');
+
+    // Compose profiles section
+    let composeProfilesSection = '';
+    if (hasDbPlugins) {
+      composeProfilesSection = `
+# -- Docker Compose Profiles ---------------------------------
+echo ""
+read -r -p "Run database containers? (disable for external services) [Y/n]: " run_db
+if [[ "\${run_db}" =~ ^[Nn]$ ]]; then
+    COMPOSE_PROFILES=""
+else
+    COMPOSE_PROFILES="db"
+fi
+`;
+    }
+
+    const content = `#!/usr/bin/env bash
+
+# Interactive environment configuration
+# Usage: ./cli env
+
+ENV_FILE="\${PROJECT_ROOT}/.env"
+
+show_env_help() {
+    echo "Interactive Environment Configuration"
+    echo ""
+    echo "Usage:"
+    echo "  ./cli env"
+    echo ""
+    echo "Walks you through configuring your .env file."
+    echo "If .env already exists, current values are used as defaults."
+    echo ""
+}
+
+# Help flag
+if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    show_env_help
+    exit 0
+fi
+
+# -- Load existing .env values as defaults ---------------------
+if [ -f "\${ENV_FILE}" ]; then
+    set -a
+    source "\${ENV_FILE}"
+    set +a
+    info "Loading existing .env values as defaults"
+fi
+
+# -- Prompt helper ---------------------------------------------
+prompt() {
+    local var_name="$1"
+    local prompt_text="$2"
+    local default_value="$3"
+    local is_secret="\${4:-false}"
+
+    if [ -n "\${default_value}" ]; then
+        if [ "\${is_secret}" = "true" ]; then
+            local display="****\${default_value: -4}"
+            read -r -p "\${prompt_text} [\${display}]: " value
+        else
+            read -r -p "\${prompt_text} [\${default_value}]: " value
+        fi
+    else
+        read -r -p "\${prompt_text}: " value
+    fi
+
+    # Use default if empty
+    value="\${value:-\${default_value}}"
+    eval "export \${var_name}='\${value}'"
+}
+
+# -- Generate random token ------------------------------------
+generate_token() {
+    if command -v uuidgen &> /dev/null; then
+        uuidgen | tr '[:upper:]' '[:lower:]'
+    else
+        head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32
+    fi
+}
+
+echo ""
+echo "========================================="
+echo "  ${config.projectName} - Environment Setup"
+echo "========================================="
+echo ""
+
+# -- Environment -----------------------------------------------
+prompt APP_ENV "Environment (local/staging/prod)" "\${APP_ENV:-local}"
+prompt DOMAIN "Domain" "\${DOMAIN:-${config.domain}}"
+
+# -- Docker ----------------------------------------------------
+prompt CONTAINER_PREFIX "Container prefix" "\${CONTAINER_PREFIX:-${config.containerPrefix}}"
+${pluginPromptsText}
+# -- Ports (local only) ----------------------------------------
+if [[ "\${APP_ENV}" == "local" ]]; then
+    echo ""
+    info "Local ports"
+${portPromptsText}
+fi
+
+# -- SSL -------------------------------------------------------
+if [[ "\${APP_ENV}" != "local" ]]; then
+    echo ""
+    info "SSL configuration"
+    prompt CERT_EMAIL "Let's Encrypt email" "\${CERT_EMAIL:-admin@\${DOMAIN}}"
+fi
+${composeProfilesSection}
+# -- Write .env file -------------------------------------------
+echo ""
+info "Writing \${ENV_FILE}..."
+
+cat > "\${ENV_FILE}" << ENVEOF
+# -- Environment -----------------------------------------------
+APP_ENV=\${APP_ENV}
+DOMAIN=\${DOMAIN}
+
+# -- Docker ----------------------------------------------------
+CONTAINER_PREFIX=\${CONTAINER_PREFIX}
+PROJECT_NAME=${config.projectName}
+${dbEnvLinesText}ENVEOF
+
+if [[ "\${APP_ENV}" == "local" ]]; then
+    cat >> "\${ENV_FILE}" << ENVEOF
+
+# -- Ports (local dev only) ------------------------------------
+${portEnvLinesText}
+ENVEOF
+fi
+
+if [ -n "\${CERT_EMAIL:-}" ]; then
+    cat >> "\${ENV_FILE}" << ENVEOF
+
+# -- SSL -------------------------------------------------------
+CERT_EMAIL=\${CERT_EMAIL}
+ENVEOF
+fi
+
+cat >> "\${ENV_FILE}" << ENVEOF
+
+# -- Docker Compose Profiles -----------------------------------
+COMPOSE_PROFILES=\${COMPOSE_PROFILES:-}
+ENVEOF
+
+echo ""
+success ".env file written successfully!"
+echo ""
+
+if [[ "\${APP_ENV}" == "local" ]]; then
+    info "Next: ./cli up"
+else
+    info "Next: ./cli deploy  (or ./cli build && ./cli up)"
+fi
+echo ""
+`;
+
+    await this.fileWriter.writeFile(join(commandsDir, 'env.sh'), content);
+  }
+
+  /**
+   * Builds the 'version' command
+   */
+  private async buildVersionCommand(commandsDir: string): Promise<void> {
+    const content = `#!/usr/bin/env bash
+
+# ./cli version -- View or bump the project version
+#
+# Usage:
+#   ./cli version              Show current version
+#   ./cli version patch        Bump patch  (0.0.1 -> 0.0.2)
+#   ./cli version minor        Bump minor  (0.0.1 -> 0.1.0)
+#   ./cli version major        Bump major  (0.0.1 -> 1.0.0)
+#   ./cli version set 1.2.3    Set explicit version
+
+VERSION_FILE="\${PROJECT_ROOT}/VERSION"
+
+if [[ ! -f "\$VERSION_FILE" ]]; then
+    echo "0.0.0" > "\$VERSION_FILE"
+fi
+
+CURRENT=\$(tr -d '[:space:]' < "\$VERSION_FILE")
+
+bump_version() {
+    local version="$1"
+    local part="$2"
+
+    IFS='.' read -r major minor patch <<< "\$version"
+    major="\${major:-0}"
+    minor="\${minor:-0}"
+    patch="\${patch:-0}"
+
+    case "\$part" in
+        major)
+            major=\$((major + 1))
+            minor=0
+            patch=0
+            ;;
+        minor)
+            minor=\$((minor + 1))
+            patch=0
+            ;;
+        patch)
+            patch=\$((patch + 1))
+            ;;
+    esac
+
+    echo "\${major}.\${minor}.\${patch}"
+}
+
+SUB="\${1:-}"
+
+case "\$SUB" in
+    "")
+        info "Current version: \${CURRENT}"
+        ;;
+    patch|minor|major)
+        NEW=\$(bump_version "\$CURRENT" "\$SUB")
+        echo "\$NEW" > "\$VERSION_FILE"
+        success "Version bumped: \${CURRENT} -> \${NEW}"
+        ;;
+    set)
+        NEW="\${2:-}"
+        if [[ -z "\$NEW" ]]; then
+            error "Usage: ./cli version set <version>"
+            exit 1
+        fi
+        if [[ ! "\$NEW" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+$ ]]; then
+            error "Invalid version format. Expected: X.Y.Z (e.g. 1.2.3)"
+            exit 1
+        fi
+        echo "\$NEW" > "\$VERSION_FILE"
+        success "Version set: \${CURRENT} -> \${NEW}"
+        ;;
+    *)
+        error "Unknown subcommand: \${SUB}"
+        echo ""
+        echo "Usage:"
+        echo "  ./cli version              Show current version"
+        echo "  ./cli version patch        Bump patch  (0.0.1 -> 0.0.2)"
+        echo "  ./cli version minor        Bump minor  (0.0.1 -> 0.1.0)"
+        echo "  ./cli version major        Bump major  (0.0.1 -> 1.0.0)"
+        echo "  ./cli version set 1.2.3    Set explicit version"
+        exit 1
+        ;;
+esac
+`;
+
+    await this.fileWriter.writeFile(join(commandsDir, 'version.sh'), content);
+  }
+
+  /**
    * Builds the 'certs' command
    */
   private async buildCertsCommand(commandsDir: string, config: ProjectConfig): Promise<void> {
@@ -548,11 +1346,6 @@ show_cert_help() {
     echo "  ./cli certs --force                           # Regenerate certificates"
     echo "  ./cli certs --email=admin@example.com         # Staging/Prod: Let's Encrypt"
     echo "  ./cli certs --staging-le                      # Test with LE staging server"
-    echo ""
-    echo "Notes:"
-    echo "  - Local: Creates a CA and signs domain certs. macOS Keychain trust optional."
-    echo "  - Staging/Prod: Uses certbot with HTTP-01 challenge (proxy must be running)."
-    echo "  - After generating, rebuild proxy: ./cli build proxy && ./cli restart proxy"
     echo ""
 }
 
@@ -729,6 +1522,38 @@ EXTEOF
 }
 
 # ============================================================================
+# Auto-renewal service
+# ============================================================================
+
+start_auto_renewal() {
+    # Check if certbot-renew container is already running
+    if dc ps --format '{{.State}}' certbot-renew 2>/dev/null | grep -qi "running"; then
+        info "Auto-renewal service is already running"
+        return
+    fi
+
+    echo ""
+    read -r -p "Start auto-renewal service (checks every 12 hours)? [Y/n]: " start_renewal
+    if [[ "\${start_renewal}" =~ ^[Nn]$ ]]; then
+        info "Skipping auto-renewal. To renew manually: ./cli certs-renew"
+        warning "Certificates expire in 90 days."
+        return
+    fi
+
+    info "Starting certbot auto-renewal service..."
+    COMPOSE_PROFILES="\${COMPOSE_PROFILES:+\${COMPOSE_PROFILES},}auto-renew,certbot" dc up -d certbot-renew
+
+    if [ \$? -eq 0 ]; then
+        success "Auto-renewal service started"
+        info "Checks for renewal every 12 hours"
+        info "Proxy auto-reloads within 1 hour of cert change"
+    else
+        warning "Failed to start auto-renewal service."
+        info "To start manually: COMPOSE_PROFILES=auto-renew ./cli up certbot-renew"
+    fi
+}
+
+# ============================================================================
 # Staging/Prod: Let's Encrypt via Certbot
 # ============================================================================
 
@@ -760,11 +1585,8 @@ generate_letsencrypt() {
         certbot_args="\${certbot_args} --force-renewal"
     fi
 
-    # Create letsencrypt directory
-    mkdir -p "\${SSL_DIR}/letsencrypt"
-
-    # Run certbot via docker compose
-    dc run --rm --profile certbot certbot \${certbot_args}
+    # Run certbot via docker compose (COMPOSE_PROFILES activates the certbot service)
+    COMPOSE_PROFILES="\${COMPOSE_PROFILES:+\${COMPOSE_PROFILES},}certbot" dc run --rm certbot \${certbot_args}
 
     if [ \$? -ne 0 ]; then
         error "Let's Encrypt certificate request failed."
@@ -775,29 +1597,31 @@ generate_letsencrypt() {
         exit 1
     fi
 
-    # Copy certs to standard location for Apache
-    local le_live="\${SSL_DIR}/letsencrypt/live/\${DOMAIN}"
-    if [ -d "\${le_live}" ]; then
-        cp -L "\${le_live}/fullchain.pem" "\${SSL_DIR}/\${DOMAIN}.crt"
-        cp -L "\${le_live}/privkey.pem" "\${SSL_DIR}/\${DOMAIN}.key"
-        cp -L "\${le_live}/chain.pem" "\${SSL_DIR}/ca.crt"
-        success "Let's Encrypt certificates installed for \${DOMAIN}"
-    else
-        error "Let's Encrypt certificates not found at expected path."
+    # Copy certs from letsencrypt volume to ssl-certs volume (inside container)
+    info "Copying certificates to SSL volume..."
+    COMPOSE_PROFILES="\${COMPOSE_PROFILES:+\${COMPOSE_PROFILES},}certbot" dc run --rm --entrypoint sh certbot -c \\
+        "cp -L /etc/letsencrypt/live/\${DOMAIN}/fullchain.pem /etc/ssl-output/\${DOMAIN}.crt && \\
+         cp -L /etc/letsencrypt/live/\${DOMAIN}/privkey.pem /etc/ssl-output/\${DOMAIN}.key && \\
+         cp -L /etc/letsencrypt/live/\${DOMAIN}/chain.pem /etc/ssl-output/ca.crt"
+
+    if [ \$? -ne 0 ]; then
+        error "Failed to copy certificates to SSL volume."
         exit 1
     fi
+    success "Let's Encrypt certificates installed for \${DOMAIN}"
 
-    # Reload Apache to pick up new certs
-    info "Reloading Apache..."
-    dc exec proxy httpd -k graceful
-    success "Apache reloaded with new certificates."
+    # Restart proxy to pick up new certs
+    info "Restarting proxy..."
+    dc restart proxy
+    success "Proxy restarted with new certificates."
 
     echo ""
-    info "Certificate: \${SSL_DIR}/\${DOMAIN}.crt"
-    info "Private Key: \${SSL_DIR}/\${DOMAIN}.key"
+    info "Certificates stored in Docker volume: ssl-certs"
+    info "Renew with: ./cli certs-renew"
     echo ""
-    info "To renew certificates later: ./cli certs-renew"
-    warning "Certificates expire in 90 days. Set up a cron job for automatic renewal."
+
+    # Start auto-renewal service
+    start_auto_renewal
 }
 
 # ============================================================================
@@ -837,7 +1661,6 @@ load_env
 
 ENV="\${APP_ENV:-local}"
 DOMAIN="\${DOMAIN:-${config.domain}}"
-SSL_DIR="\${PROJECT_ROOT}/docker/ssl"
 
 if [ "\${ENV}" = "local" ]; then
     info "Local environment uses self-signed certificates."
@@ -849,36 +1672,237 @@ check_docker
 
 info "Renewing Let's Encrypt certificates..."
 
-# Run certbot renew
-dc run --rm --profile certbot certbot renew
+# Run certbot renew (COMPOSE_PROFILES activates the certbot service)
+COMPOSE_PROFILES="\${COMPOSE_PROFILES:+\${COMPOSE_PROFILES},}certbot" dc run --rm certbot renew
 
 if [ \$? -ne 0 ]; then
     error "Certificate renewal failed."
     exit 1
 fi
 
-# Copy renewed certs to standard location
-LE_LIVE="\${SSL_DIR}/letsencrypt/live/\${DOMAIN}"
-if [ -d "\${LE_LIVE}" ]; then
-    cp -L "\${LE_LIVE}/fullchain.pem" "\${SSL_DIR}/\${DOMAIN}.crt"
-    cp -L "\${LE_LIVE}/privkey.pem" "\${SSL_DIR}/\${DOMAIN}.key"
-    cp -L "\${LE_LIVE}/chain.pem" "\${SSL_DIR}/ca.crt"
-    success "Certificates renewed for \${DOMAIN}"
-else
-    warning "No renewed certificates found. They may not have been due for renewal."
-fi
+# Copy renewed certs from letsencrypt volume to ssl-certs volume (inside container)
+info "Copying renewed certificates to SSL volume..."
+COMPOSE_PROFILES="\${COMPOSE_PROFILES:+\${COMPOSE_PROFILES},}certbot" dc run --rm --entrypoint sh certbot -c \\
+    "if [ -d /etc/letsencrypt/live/\${DOMAIN} ]; then \\
+         cp -L /etc/letsencrypt/live/\${DOMAIN}/fullchain.pem /etc/ssl-output/\${DOMAIN}.crt && \\
+         cp -L /etc/letsencrypt/live/\${DOMAIN}/privkey.pem /etc/ssl-output/\${DOMAIN}.key && \\
+         cp -L /etc/letsencrypt/live/\${DOMAIN}/chain.pem /etc/ssl-output/ca.crt && \\
+         echo 'Certificates copied'; \\
+     else \\
+         echo 'No renewed certificates found (may not have been due for renewal)'; \\
+     fi"
 
-# Reload Apache
-info "Reloading Apache..."
-dc exec proxy httpd -k graceful
-success "Apache reloaded."
+# Restart proxy to pick up new certs
+info "Restarting proxy..."
+dc restart proxy
+success "Certificate renewal complete."
 
 echo ""
-info "Tip: Add a cron job for automatic renewal:"
-echo "  0 3 * * * cd \${PROJECT_ROOT} && ./cli certs-renew >> /var/log/cert-renew.log 2>&1"
+info "Tip: For automatic renewal, start the auto-renewal service:"
+echo "  COMPOSE_PROFILES=auto-renew ./cli up certbot-renew"
 `;
 
     await this.fileWriter.writeFile(join(commandsDir, 'certs-renew.sh'), content);
+  }
+
+  /**
+   * Builds the 'install' command (conditional on app plugins)
+   */
+  private async buildInstallCommand(commandsDir: string, config: ProjectConfig): Promise<void> {
+    const appServices = config.services.filter((s) => s.category === 'app');
+
+    const installBlocks: string[] = [];
+    const caseBlocks: string[] = [];
+
+    for (const service of appServices) {
+      installBlocks.push(`    run_install "${service.name}"`);
+      caseBlocks.push(`        ${service.name})`);
+      caseBlocks.push(`            run_install ${service.name}`);
+      caseBlocks.push('            ;;');
+    }
+
+    const content = `#!/usr/bin/env bash
+
+# Install dependencies in app containers
+# Usage: ./cli install [service]
+
+check_docker
+
+SERVICE="\${1:-}"
+
+run_install() {
+    local svc="$1"
+    info "Installing dependencies in \${svc}..."
+    if dc exec "\${svc}" npm install; then
+        success "\${svc} dependencies installed!"
+    else
+        error "\${svc} dependency install failed"
+        return 1
+    fi
+}
+
+if [ -n "\${SERVICE}" ]; then
+    if ! service_exists "\${SERVICE}"; then
+        error "Service '\${SERVICE}' not found"
+        exit 1
+    fi
+    run_install "\${SERVICE}"
+else
+    # Install for all app services
+${installBlocks.join('\n')}
+fi
+`;
+
+    await this.fileWriter.writeFile(join(commandsDir, 'install.sh'), content);
+  }
+
+  /**
+   * Builds the 'typecheck' command (conditional on app plugins)
+   */
+  private async buildTypecheckCommand(commandsDir: string, config: ProjectConfig): Promise<void> {
+    const appServices = config.services.filter((s) => s.category === 'app');
+
+    const typecheckBlocks: string[] = [];
+    const caseBlocks: string[] = [];
+
+    for (const service of appServices) {
+      typecheckBlocks.push(`    run_typecheck "${service.name}" "npx tsc --noEmit"`);
+      caseBlocks.push(`        ${service.name})`);
+      caseBlocks.push(`            run_typecheck ${service.name} "npx tsc --noEmit"`);
+      caseBlocks.push('            ;;');
+    }
+
+    const serviceNames = appServices.map((s) => `'${s.name}'`).join(' or ');
+
+    const content = `#!/usr/bin/env bash
+
+# Run TypeScript type checking across all services
+# Usage: ./cli typecheck [service]
+
+check_docker
+load_env
+
+SERVICE="\${1:-}"
+FAILED=false
+
+run_typecheck() {
+    local svc="$1"
+    local cmd="$2"
+    info "Type-checking \${svc}..."
+    if dc exec "\${svc}" sh -c "\${cmd}" 2>&1; then
+        success "\${svc} passed"
+    else
+        error "\${svc} has type errors"
+        FAILED=true
+    fi
+    echo ""
+}
+
+if [ -n "\${SERVICE}" ]; then
+    case "\${SERVICE}" in
+${caseBlocks.join('\n')}
+        *)
+            error "Unknown service: \${SERVICE}. Use ${serviceNames}."
+            exit 1
+            ;;
+    esac
+else
+${typecheckBlocks.join('\n')}
+fi
+
+if [ "\${FAILED}" = true ]; then
+    error "Type checking failed. Fix errors before deploying."
+    exit 1
+else
+    success "All type checks passed!"
+fi
+`;
+
+    await this.fileWriter.writeFile(join(commandsDir, 'typecheck.sh'), content);
+  }
+
+  /**
+   * Builds the 'db' command (conditional on database plugins)
+   */
+  private async buildDbCommand(commandsDir: string, config: ProjectConfig): Promise<void> {
+    // Find the first app service (used for running ORM commands)
+    const firstAppService = config.services.find((s) => s.category === 'app');
+    const appServiceName = firstAppService?.name || 'api';
+
+    const content = `#!/usr/bin/env bash
+
+# Database management commands
+# Usage: ./cli db <subcommand>
+#
+# Subcommands:
+#   push      Push schema to database
+#   migrate   Run database migrations
+#   generate  Generate migration files
+#   sync      Sync database schema
+
+check_docker
+load_env
+
+ENV="\${APP_ENV:-local}"
+SUB="\${1:-}"
+shift || true
+
+if [ -z "\${SUB}" ]; then
+    echo "Database Management"
+    echo ""
+    echo "Usage:"
+    echo "  ./cli db <subcommand>"
+    echo ""
+    echo "Subcommands:"
+    echo "  push      Push schema to database"
+    echo "  migrate   Run database migrations"
+    echo "  generate  Generate migration files"
+    echo "  sync      Sync database schema"
+    exit 0
+fi
+
+run_db_cmd() {
+    local cmd="$1"
+
+    if [ "\${ENV}" = "local" ]; then
+        # Local: exec into running app container
+        dc exec ${appServiceName} \$cmd
+    else
+        # Non-local: use tools profile for one-off migration container
+        COMPOSE_PROFILES="\${COMPOSE_PROFILES:+\${COMPOSE_PROFILES},}tools" dc run --build --rm ${appServiceName} \$cmd
+    fi
+}
+
+case "\${SUB}" in
+    push)
+        info "Pushing schema to database..."
+        run_db_cmd "npm run db:push"
+        success "Schema pushed!"
+        ;;
+    migrate)
+        info "Running database migrations..."
+        run_db_cmd "npm run db:migrate"
+        success "Migrations complete!"
+        ;;
+    generate)
+        info "Generating migration files..."
+        run_db_cmd "npm run db:generate"
+        success "Migration files generated!"
+        ;;
+    sync)
+        info "Syncing database schema..."
+        run_db_cmd "npm run db:push"
+        success "Database synced!"
+        ;;
+    *)
+        error "Unknown subcommand: \${SUB}"
+        echo "Use: push, migrate, generate, or sync"
+        exit 1
+        ;;
+esac
+`;
+
+    await this.fileWriter.writeFile(join(commandsDir, 'db.sh'), content);
   }
 
   /**
