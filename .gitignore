@@ -38,6 +38,9 @@ test-output/
 test-cli-output/
 *-output/
 
+# Git worktrees
+.worktrees/
+
 # Temporary files
 *.log
 *.tmp
