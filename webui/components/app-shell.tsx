@@ -20,12 +20,12 @@ const NAV_ITEMS: { view: View; icon: React.ElementType; label: string }[] = [
 
 export function AppShell() {
   const [activeView, setActiveView] = useState<View>('create')
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('dpb:sidebar:collapsed') === 'true'
-    }
-    return false
-  })
+  const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    const stored = localStorage.getItem('dpb:sidebar:collapsed')
+    if (stored !== null) setCollapsed(stored === 'true')
+  }, [])
 
   useEffect(() => {
     localStorage.setItem('dpb:sidebar:collapsed', String(collapsed))
