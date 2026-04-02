@@ -71,9 +71,9 @@ export function StepServices({ state, onChange }: StepServicesProps) {
       <div className="flex flex-col gap-4">
         {[...Array(3)].map((_, i) => (
           <div key={i} className="space-y-2">
-            <div className="h-4 w-16 bg-[#2e2040] rounded animate-pulse" />
+            <div className="h-4 w-16 bg-[#3a3948] rounded animate-pulse" />
             {[...Array(2)].map((_, j) => (
-              <div key={j} className="h-12 bg-[#1d1428] rounded-md border border-[#2e2040] animate-pulse" />
+              <div key={j} className="h-12 bg-[#252432] rounded-md border border-[#3a3948] animate-pulse" />
             ))}
           </div>
         ))}
@@ -83,7 +83,7 @@ export function StepServices({ state, onChange }: StepServicesProps) {
 
   if (error) {
     return (
-      <div className="rounded-md border border-destructive bg-[#1d1428] p-4 text-sm text-destructive">
+      <div className="rounded-md border border-destructive bg-[#252432] p-4 text-sm text-destructive">
         {error}
         <button
           onClick={fetchServices}
@@ -113,13 +113,13 @@ export function StepServices({ state, onChange }: StepServicesProps) {
                     onClick={() => toggleService(service.name, !isSelected)}
                     className={`flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-[#2a1a3e] border-purple-500'
-                        : 'bg-[#1d1428] border-[#2e2040] hover:border-[#3d2a5a]'
+                        ? 'bg-[#32313f] border-[#6264a7]'
+                        : 'bg-[#252432] border-[#3a3948] hover:border-[#44435a]'
                     }`}
                   >
                     <div
                       className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        isSelected ? 'bg-purple-400' : 'bg-[#3d2a5a]'
+                        isSelected ? 'bg-[#7b83eb]' : 'bg-[#44435a]'
                       }`}
                     />
                     <div className="flex-1 min-w-0">
@@ -137,11 +137,11 @@ export function StepServices({ state, onChange }: StepServicesProps) {
       </div>
 
       {/* Right — summary panel */}
-      <div className="w-44 flex-shrink-0 bg-[#1d1428] border border-[#2e2040] rounded-lg p-3 flex flex-col">
+      <div className="w-44 flex-shrink-0 bg-[#252432] border border-[#3a3948] rounded-lg p-3 flex flex-col">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold text-purple-400 tracking-wide">YOUR STACK</span>
+          <span className="text-xs font-bold text-[#7b83eb] tracking-wide">YOUR STACK</span>
           {state.selectedServices.length > 0 && (
-            <span className="text-[10px] bg-[#2a1a3e] border border-purple-500 text-purple-300 rounded-full px-2 py-0.5 font-semibold">
+            <span className="text-[10px] bg-[#32313f] border border-[#6264a7] text-[#9ea4f0] rounded-full px-2 py-0.5 font-semibold">
               {state.selectedServices.length}
             </span>
           )}
@@ -161,7 +161,7 @@ export function StepServices({ state, onChange }: StepServicesProps) {
                   value={state.servicePorts[name] ?? DEFAULT_PORTS[name] ?? ''}
                   onChange={(e) => handlePortChange(name, e.target.value)}
                   disabled={state.useDefaultPorts}
-                  className="h-7 text-xs bg-[#13101e] border-[#2e2040] focus-visible:ring-purple-500 disabled:opacity-50"
+                  className="h-7 text-xs bg-[#1c1b24] border-[#3a3948] focus-visible:ring-[#6264a7] disabled:opacity-50"
                 />
               </div>
             ))}
@@ -169,7 +169,7 @@ export function StepServices({ state, onChange }: StepServicesProps) {
         )}
 
         {/* Use default ports toggle */}
-        <div className="mt-3 pt-3 border-t border-[#2e2040] flex items-center gap-2">
+        <div className="mt-3 pt-3 border-t border-[#3a3948] flex items-center gap-2">
           <Checkbox
             id="use-default-ports"
             checked={state.useDefaultPorts}

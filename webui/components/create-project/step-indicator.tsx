@@ -20,17 +20,17 @@ export function StepIndicator({ currentStep }: StepIndicatorProps) {
               <div
                 className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
                   isCompleted
-                    ? 'bg-purple-500 border-purple-500 text-white'
+                    ? 'bg-[#6264a7] border-[#6264a7] text-white'
                     : isCurrent
-                    ? 'border-purple-500 text-purple-400 bg-[#2a1a3e]'
-                    : 'border-[#2e2040] text-muted-foreground bg-[#1d1428]'
+                    ? 'border-[#6264a7] text-[#7b83eb] bg-[#32313f]'
+                    : 'border-[#3a3948] text-muted-foreground bg-[#252432]'
                 }`}
               >
                 {isCompleted ? <Check className="w-3.5 h-3.5" /> : step}
               </div>
               <span
                 className={`text-[10px] mt-1 font-medium whitespace-nowrap ${
-                  isCurrent ? 'text-purple-400' : isCompleted ? 'text-foreground' : 'text-muted-foreground'
+                  isCurrent ? 'text-[#7b83eb]' : isCompleted ? 'text-foreground' : 'text-muted-foreground'
                 }`}
               >
                 {label}
@@ -39,7 +39,7 @@ export function StepIndicator({ currentStep }: StepIndicatorProps) {
             {i < STEPS.length - 1 && (
               <div
                 className={`flex-1 h-px mx-3 mb-3 transition-colors ${
-                  step < currentStep ? 'bg-purple-500' : 'bg-[#2e2040]'
+                  step < currentStep ? 'bg-[#6264a7]' : 'bg-[#3a3948]'
                 }`}
               />
             )}

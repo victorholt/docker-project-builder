@@ -96,14 +96,14 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
       </div>
 
       {/* Config */}
-      <div className="bg-[#1d1428] border border-[#2e2040] rounded-lg p-5 space-y-5">
+      <div className="bg-[#252432] border border-[#3a3948] rounded-lg p-5 space-y-5">
         <div className="space-y-2">
           <Label htmlFor="testName">Project Name</Label>
           <Input
             id="testName"
             value={projectName}
             onChange={(e) => setProjectName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-            className="w-64 bg-[#13101e] border-[#2e2040] focus-visible:ring-purple-500"
+            className="w-64 bg-[#1c1b24] border-[#3a3948] focus-visible:ring-[#6264a7]"
           />
           <p className="text-xs text-muted-foreground">Created as {projectName}-output (auto-gitignored)</p>
         </div>
@@ -119,11 +119,11 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
                   onClick={() => toggleService(s.name)}
                   className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
                     isSelected
-                      ? 'bg-[#2a1a3e] border-purple-500'
-                      : 'bg-[#13101e] border-[#2e2040] hover:border-[#3d2a5a]'
+                      ? 'bg-[#32313f] border-[#6264a7]'
+                      : 'bg-[#1c1b24] border-[#3a3948] hover:border-[#44435a]'
                   }`}
                 >
-                  <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${isSelected ? 'bg-purple-400' : 'bg-[#3d2a5a]'}`} />
+                  <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${isSelected ? 'bg-[#7b83eb]' : 'bg-[#44435a]'}`} />
                   <div>
                     <p className={`text-sm font-semibold ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}>
                       {s.label}
@@ -144,13 +144,13 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
                 <div key={step} className="flex items-center gap-2">
                   <div
                     className={`w-2 h-2 rounded-full ${
-                      i < progressStep ? 'bg-purple-500' : i === progressStep ? 'bg-purple-400 animate-pulse' : 'bg-[#2e2040]'
+                      i < progressStep ? 'bg-[#6264a7]' : i === progressStep ? 'bg-[#7b83eb] animate-pulse' : 'bg-[#3a3948]'
                     }`}
                   />
-                  <span className={`text-xs ${i === progressStep ? 'text-purple-300 font-semibold' : 'text-muted-foreground'}`}>
+                  <span className={`text-xs ${i === progressStep ? 'text-[#9ea4f0] font-semibold' : 'text-muted-foreground'}`}>
                     {step}
                   </span>
-                  {i < PROGRESS_STEPS.length - 1 && <span className="text-[#2e2040]">&#8594;</span>}
+                  {i < PROGRESS_STEPS.length - 1 && <span className="text-[#3a3948]">&#8594;</span>}
                 </div>
               ))}
             </div>
@@ -164,7 +164,7 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
             onClick={runTest}
             disabled={selected.length === 0}
             className="w-full py-2.5 rounded-md text-sm font-bold text-white disabled:opacity-40"
-            style={{ background: 'linear-gradient(135deg, #a855f7, #6366f1)' }}
+            style={{ background: 'linear-gradient(135deg, #6264a7, #7b83eb)' }}
           >
             Run Test
           </button>
@@ -202,7 +202,7 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
               {results.map((r, i) => (
                 <div
                   key={i}
-                  className={`flex items-center justify-between p-3 rounded-md border-l-2 bg-[#1d1428] border border-[#2e2040] text-sm ${
+                  className={`flex items-center justify-between p-3 rounded-md border-l-2 bg-[#252432] border border-[#3a3948] text-sm ${
                     r.success ? 'border-l-green-500' : 'border-l-red-500'
                   }`}
                 >
@@ -224,7 +224,7 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
 
       {/* Logs — collapsed by default */}
       {logs && (
-        <div className="bg-[#1d1428] border border-[#2e2040] rounded-lg overflow-hidden">
+        <div className="bg-[#252432] border border-[#3a3948] rounded-lg overflow-hidden">
           <button
             onClick={() => setShowLogs((v) => !v)}
             className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -236,12 +236,12 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
             <div className="relative">
               <button
                 onClick={copyLogs}
-                className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-xs border border-[#2e2040] rounded bg-[#13101e] text-muted-foreground hover:text-foreground"
+                className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-xs border border-[#3a3948] rounded bg-[#1c1b24] text-muted-foreground hover:text-foreground"
               >
                 <Copy className="w-3 h-3" />
                 Copy
               </button>
-              <pre className="p-4 bg-[#0d0b14] text-gray-300 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto border-t border-[#2e2040]">
+              <pre className="p-4 bg-[#141318] text-gray-300 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto border-t border-[#3a3948]">
                 {logs}
               </pre>
             </div>

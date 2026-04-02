@@ -52,7 +52,7 @@ export function StepReview({ state, onBack, onGenerate }: StepReviewProps) {
   return (
     <div className="space-y-6">
       {/* Summary */}
-      <div className="bg-[#1d1428] border border-[#2e2040] rounded-lg p-4 space-y-4">
+      <div className="bg-[#252432] border border-[#3a3948] rounded-lg p-4 space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Project</p>
@@ -72,7 +72,7 @@ export function StepReview({ state, onBack, onGenerate }: StepReviewProps) {
               {state.environments.map((env) => (
                 <span
                   key={env}
-                  className="text-[10px] bg-[#2a1a3e] border border-purple-500 text-purple-300 rounded-full px-2 py-0.5 capitalize"
+                  className="text-[10px] bg-[#32313f] border border-[#6264a7] text-[#9ea4f0] rounded-full px-2 py-0.5 capitalize"
                 >
                   {env}
                 </span>
@@ -98,7 +98,7 @@ export function StepReview({ state, onBack, onGenerate }: StepReviewProps) {
 
       {/* Error */}
       {error && (
-        <p className="text-sm text-destructive bg-[#1d1428] border border-destructive rounded-md px-3 py-2">
+        <p className="text-sm text-destructive bg-[#252432] border border-destructive rounded-md px-3 py-2">
           {error}
         </p>
       )}
@@ -115,7 +115,7 @@ export function StepReview({ state, onBack, onGenerate }: StepReviewProps) {
           onClick={handleGenerate}
           disabled={generating}
           className="flex items-center gap-2 px-6 py-2.5 rounded-md text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed"
-          style={{ background: 'linear-gradient(135deg, #a855f7, #6366f1)' }}
+          style={{ background: 'linear-gradient(135deg, #6264a7, #7b83eb)' }}
         >
           {generating ? (
             <>
