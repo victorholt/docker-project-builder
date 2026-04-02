@@ -40,7 +40,7 @@ export function StepServices({ state, onChange, onNext, onBack }: StepServicesPr
       : state.selectedServices.filter((s) => s !== name)
 
     const ports = { ...state.servicePorts }
-    if (enabled && state.useDefaultPorts && DEFAULT_PORTS[name]) {
+    if (enabled && DEFAULT_PORTS[name]) {
       ports[name] = DEFAULT_PORTS[name]
     }
     if (!enabled) {
