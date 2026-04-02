@@ -41,6 +41,9 @@ test-cli-output/
 # Git worktrees
 .worktrees/
 
+# Superpowers brainstorm/visual companion session files
+.superpowers/
+
 # Temporary files
 *.log
 *.tmp
