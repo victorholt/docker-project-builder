@@ -86,7 +86,7 @@ export function CreateProject({ onNavigate, layout = 'steps' }: CreateProjectPro
             <StepInfo state={state} onChange={patch} onNext={() => {}} />
           </div>
           <div className="flex-1 flex flex-col gap-4">
-            <StepServices state={state} onChange={patch} onNext={() => {}} onBack={() => {}} />
+            <StepServices state={state} onChange={patch} />
             <div className="mt-auto">
               {genError && (
                 <p className="text-sm text-destructive mb-2">{genError}</p>
@@ -127,7 +127,7 @@ export function CreateProject({ onNavigate, layout = 'steps' }: CreateProjectPro
       )}
       {step === 2 && (
         <>
-          <StepServices state={state} onChange={patch} onNext={() => setStep(3)} onBack={() => setStep(1)} />
+          <StepServices state={state} onChange={patch} />
           <div className="flex items-center justify-between mt-6">
             <button
               onClick={() => setStep(1)}

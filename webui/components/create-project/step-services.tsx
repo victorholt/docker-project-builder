@@ -9,11 +9,9 @@ import { getCategoryLabel, DEFAULT_PORTS } from './constants'
 interface StepServicesProps {
   state: WizardState
   onChange: (patch: Partial<WizardState>) => void
-  onNext: () => void
-  onBack: () => void
 }
 
-export function StepServices({ state, onChange, onNext, onBack }: StepServicesProps) {
+export function StepServices({ state, onChange }: StepServicesProps) {
   const [servicesByCategory, setServicesByCategory] = useState<ServicesByCategory>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
