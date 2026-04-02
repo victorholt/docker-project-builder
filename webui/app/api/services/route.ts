@@ -24,34 +24,46 @@ export async function GET() {
     let currentCategory = ''
 
     for (const line of lines) {
-      // Skip empty lines and headers
-      if (!line.trim() || line.includes('Available Services')) {
+      const trimmed = line.trim()
+
+      // Skip empty lines, main header, and total line
+      if (!trimmed || trimmed.includes('Available Services') || trimmed.startsWith('Total:')) {
         continue
       }
 
-      // Match category headers (e.g., "📱 Application Frameworks" or "🗄️  Databases")
-      const categoryMatch = line.match(/^[^\w\s]*\s*([A-Z][^$]+)$/)
-      if (categoryMatch && !line.includes('  ')) {
-        currentCategory = categoryMatch[1].trim().toLowerCase().replace(/\s+/g, '-')
-        services[currentCategory] = []
+      // Category headers start with an emoji (non-ASCII) at the beginning of the line (no leading spaces)
+      // e.g., "📱 Application Frameworks" or "🗄️  Databases"
+      if (!line.startsWith(' ') && /[^\x00-\x7F]/.test(line)) {
+        // Extract category name: strip emojis/special chars, trim whitespace
+        const categoryName = trimmed.replace(/[^\w\s]/g, '').trim()
+        if (categoryName) {
+          currentCategory = categoryName.toLowerCase().replace(/\s+/g, '-')
+          services[currentCategory] = []
+        }
         continue
       }
 
-      // Match service lines (e.g., "  api             Express.js API - 20-alpine")
-      const serviceMatch = line.match(/^\s+(\S+)\s+(.+?)(?:\s+-\s+\S+)?$/)
-      if (serviceMatch && currentCategory && !line.includes('Also:')) {
-        const name = serviceMatch[1]
-        const description = serviceMatch[2].replace(/\s+-\s+\S+$/, '').trim()
-        services[currentCategory].push({
-          name,
-          category: currentCategory,
-          description,
-        })
+      // Service lines start with spaces: "  api             Express.js API - 20-alpine"
+      // Skip "Also:" lines
+      if (line.startsWith('  ') && currentCategory && !trimmed.startsWith('Also:')) {
+        const serviceMatch = trimmed.match(/^(\S+)\s+(.+?)(?:\s+-\s+\S+)?$/)
+        if (serviceMatch) {
+          const name = serviceMatch[1]
+          const description = serviceMatch[2].replace(/\s+-\s+\S+$/, '').trim()
+          services[currentCategory].push({
+            name,
+            category: currentCategory,
+            description,
+          })
+        }
       }
     }
 
-    // Filter out proxy - it's always auto-included and configured separately
+    // Filter out proxy (auto-included) and any empty categories
     delete services['proxy']
+    for (const key of Object.keys(services)) {
+      if (services[key].length === 0) delete services[key]
+    }
 
     return NextResponse.json({ services })
   } catch (error) {
