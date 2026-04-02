@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { View } from '../app-shell'
+import { GRADIENT } from '@/lib/theme'
 import { WizardState, WizardLayout, WizardStep } from './types'
 import { StepIndicator } from './step-indicator'
 import { StepInfo } from './step-info'
@@ -103,7 +104,7 @@ export function CreateProject({ onNavigate, layout = 'steps' }: CreateProjectPro
                   onClick={handleGenerate}
                   disabled={generating || !state.projectName || state.selectedServices.length === 0}
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-semibold text-white disabled:opacity-40"
-                  style={{ background: 'linear-gradient(135deg, #6264a7, #7b83eb)' }}
+                  style={{ background: GRADIENT }}
                 >
                   {generating ? 'Generating...' : 'Generate & Download'}
                 </button>
@@ -139,7 +140,7 @@ export function CreateProject({ onNavigate, layout = 'steps' }: CreateProjectPro
               onClick={() => setStep(3)}
               disabled={state.selectedServices.length === 0}
               className="px-6 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-40"
-              style={{ background: 'linear-gradient(135deg, #6264a7, #7b83eb)' }}
+              style={{ background: GRADIENT }}
             >
               Next: Review →
             </button>

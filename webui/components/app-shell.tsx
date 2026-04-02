@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Wand2, Layers, FlaskConical, ChevronRight, ChevronLeft } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { GRADIENT } from '@/lib/theme'
 
 // Lazy imports — these will be created in subsequent tasks.
 // Use placeholder divs until the real components exist.
@@ -35,7 +36,7 @@ export function AppShell() {
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
       <aside
-        className={`relative flex flex-col bg-[#141318] border-r border-[#3a3948] transition-all duration-200 flex-shrink-0 ${
+        className={`relative flex flex-col bg-dpb-overlay border-r border-dpb-border transition-all duration-200 flex-shrink-0 ${
           collapsed ? 'w-[52px]' : 'w-[200px]'
         }`}
       >
@@ -43,7 +44,7 @@ export function AppShell() {
         <div className={`flex items-center gap-3 p-3 mb-2 ${collapsed ? 'justify-center' : ''}`}>
           <div
             className="w-8 h-8 rounded-lg flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, #6264a7, #7b83eb)' }}
+            style={{ background: GRADIENT }}
           />
           {!collapsed && (
             <div>
@@ -63,8 +64,8 @@ export function AppShell() {
                     onClick={() => setActiveView(view)}
                     className={`flex items-center gap-3 rounded-md px-2 py-2 transition-colors w-full text-left ${
                       activeView === view
-                        ? 'bg-[#32313f] border border-[#6264a7] text-[#7b83eb]'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-[#252432]'
+                        ? 'bg-dpb-raised border border-dpb-border-focus text-dpb-accent-light'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-dpb-surface'
                     } ${collapsed ? 'justify-center' : ''}`}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
@@ -84,13 +85,13 @@ export function AppShell() {
         {/* Collapse toggle */}
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#32313f] border border-[#6264a7] flex items-center justify-center hover:bg-[#44435a] transition-colors z-10"
+          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-dpb-raised border border-dpb-border-focus flex items-center justify-center hover:bg-dpb-dot-inactive transition-colors z-10"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? (
-            <ChevronRight className="w-3 h-3 text-[#7b83eb]" />
+            <ChevronRight className="w-3 h-3 text-dpb-accent-light" />
           ) : (
-            <ChevronLeft className="w-3 h-3 text-[#7b83eb]" />
+            <ChevronLeft className="w-3 h-3 text-dpb-accent-light" />
           )}
         </button>
       </aside>

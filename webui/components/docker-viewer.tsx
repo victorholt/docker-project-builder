@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
 import { View } from './app-shell'
+import { GRADIENT } from '@/lib/theme'
 
 interface Project { name: string; path: string }
 
@@ -114,7 +115,7 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
       <div>
         <h1 className="text-2xl font-bold mb-1 text-foreground">Docker Viewer</h1>
         <p className="text-sm text-muted-foreground mb-6">Manage your Docker containers</p>
-        <div className="h-10 bg-[#252432] rounded-md border border-[#3a3948] animate-pulse" />
+        <div className="h-10 bg-dpb-surface rounded-md border border-dpb-border animate-pulse" />
       </div>
     )
   }
@@ -137,11 +138,11 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
     return (
       <div>
         <h1 className="text-2xl font-bold mb-1 text-foreground">Docker Viewer</h1>
-        <div className="bg-[#252432] border border-[#3a3948] rounded-lg p-8 text-center mt-6">
+        <div className="bg-dpb-surface border border-dpb-border rounded-lg p-8 text-center mt-6">
           <p className="text-muted-foreground mb-4">No projects found.</p>
           <button
             onClick={() => onNavigate('create')}
-            className="text-sm font-semibold text-[#7b83eb] hover:text-[#9ea4f0] underline"
+            className="text-sm font-semibold text-dpb-accent-light hover:text-dpb-accent-muted underline"
           >
             Create your first project →
           </button>
@@ -161,12 +162,12 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
 
       {/* Project selector */}
       <Select value={selectedProject} onValueChange={setSelectedProject}>
-        <SelectTrigger className="w-64 bg-[#252432] border-[#3a3948] focus:ring-[#6264a7]">
+        <SelectTrigger className="w-64 bg-dpb-surface border-dpb-border focus:ring-dpb-accent">
           <SelectValue placeholder="Select project" />
         </SelectTrigger>
-        <SelectContent className="bg-[#252432] border-[#3a3948]">
+        <SelectContent className="bg-dpb-surface border-dpb-border">
           {projects.map((p) => (
-            <SelectItem key={p.name} value={p.name} className="text-foreground focus:bg-[#32313f]">
+            <SelectItem key={p.name} value={p.name} className="text-foreground focus:bg-dpb-raised">
               {p.name}
             </SelectItem>
           ))}
@@ -180,7 +181,7 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
           onClick={() => executeAction('up')}
           disabled={isExecuting}
           className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-40"
-          style={{ background: 'linear-gradient(135deg, #6264a7, #7b83eb)' }}
+          style={{ background: GRADIENT }}
         >
           {executingAction === 'up' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
           Start
@@ -205,7 +206,7 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
               key={action}
               onClick={() => executeAction(action)}
               disabled={isExecuting}
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-[#3a3948] text-muted-foreground hover:text-foreground hover:border-[#6264a7] disabled:opacity-40 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-dpb-border text-muted-foreground hover:text-foreground hover:border-dpb-border-focus disabled:opacity-40 transition-colors"
             >
               {executingAction === action ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />}
               {label}
@@ -216,11 +217,11 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
 
       {/* Output tabs — always rendered */}
       <Tabs defaultValue="status" className="w-full">
-        <TabsList className="bg-[#252432] border border-[#3a3948]">
-          <TabsTrigger value="status" className="data-[state=active]:bg-[#32313f] data-[state=active]:text-[#9ea4f0]">
+        <TabsList className="bg-dpb-surface border border-dpb-border">
+          <TabsTrigger value="status" className="data-[state=active]:bg-dpb-raised data-[state=active]:text-dpb-accent-muted">
             Status
           </TabsTrigger>
-          <TabsTrigger value="logs" className="data-[state=active]:bg-[#32313f] data-[state=active]:text-[#9ea4f0]">
+          <TabsTrigger value="logs" className="data-[state=active]:bg-dpb-raised data-[state=active]:text-dpb-accent-muted">
             Logs
           </TabsTrigger>
         </TabsList>
@@ -229,10 +230,10 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
           {!status ? (
             <p className="text-sm text-muted-foreground py-4">Click Status to load</p>
           ) : parsedStatus ? (
-            <div className="overflow-x-auto rounded-md border border-[#3a3948]">
+            <div className="overflow-x-auto rounded-md border border-dpb-border">
               <table className="w-full text-xs text-left">
                 <thead>
-                  <tr className="bg-[#252432] text-muted-foreground">
+                  <tr className="bg-dpb-surface text-muted-foreground">
                     {['Service', 'Image', 'Status', 'Ports'].map((h) => (
                       <th key={h} className="px-3 py-2 font-semibold uppercase tracking-wider">{h}</th>
                     ))}
@@ -240,7 +241,7 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
                 </thead>
                 <tbody>
                   {parsedStatus.map((row, i) => (
-                    <tr key={i} className="border-t border-[#3a3948] hover:bg-[#252432]">
+                    <tr key={i} className="border-t border-dpb-border hover:bg-dpb-surface">
                       <td className="px-3 py-2 font-medium text-foreground">{row.name}</td>
                       <td className="px-3 py-2 text-muted-foreground">{row.image}</td>
                       <td className="px-3 py-2">
@@ -254,7 +255,7 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
               </table>
             </div>
           ) : (
-            <pre className="p-4 rounded-md bg-[#141318] text-green-400 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto border border-[#3a3948]">
+            <pre className="p-4 rounded-md bg-dpb-overlay text-green-400 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto border border-dpb-border">
               {status}
             </pre>
           )}
@@ -265,13 +266,13 @@ export function DockerViewer({ onNavigate }: DockerViewerProps) {
             {logs && (
               <button
                 onClick={() => copyText(logs)}
-                className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-xs border border-[#3a3948] rounded bg-[#252432] text-muted-foreground hover:text-foreground"
+                className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-xs border border-dpb-border rounded bg-dpb-surface text-muted-foreground hover:text-foreground"
               >
                 <Copy className="w-3 h-3" />
                 Copy
               </button>
             )}
-            <pre className="p-4 rounded-md bg-[#141318] text-gray-300 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto border border-[#3a3948]">
+            <pre className="p-4 rounded-md bg-dpb-overlay text-gray-300 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto border border-dpb-border">
               {logs || 'Click View Logs to load'}
               <div ref={logsEndRef} />
             </pre>

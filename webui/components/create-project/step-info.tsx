@@ -3,6 +3,7 @@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { WizardState } from './types'
+import { GRADIENT } from '@/lib/theme'
 
 interface StepInfoProps {
   state: WizardState
@@ -30,7 +31,7 @@ export function StepInfo({ state, onChange, onNext }: StepInfoProps) {
           onChange={(e) =>
             onChange({ projectName: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })
           }
-          className="bg-[#252432] border-[#3a3948] focus-visible:ring-[#6264a7]"
+          className="bg-dpb-surface border-dpb-border focus-visible:ring-dpb-accent"
         />
         <p className="text-xs text-muted-foreground">Lowercase letters, numbers, and hyphens only</p>
       </div>
@@ -43,7 +44,7 @@ export function StepInfo({ state, onChange, onNext }: StepInfoProps) {
           placeholder="example.local"
           value={state.domain}
           onChange={(e) => onChange({ domain: e.target.value.toLowerCase() })}
-          className="bg-[#252432] border-[#3a3948] focus-visible:ring-[#6264a7]"
+          className="bg-dpb-surface border-dpb-border focus-visible:ring-dpb-accent"
         />
         <p className="text-xs text-muted-foreground">
           Defaults to {state.projectName || 'project-name'}.local
@@ -60,7 +61,7 @@ export function StepInfo({ state, onChange, onNext }: StepInfoProps) {
           max={65535}
           value={state.proxyPort}
           onChange={(e) => onChange({ proxyPort: parseInt(e.target.value) || 0 })}
-          className={`w-32 bg-[#252432] border-[#3a3948] focus-visible:ring-[#6264a7] ${
+          className={`w-32 bg-dpb-surface border-dpb-border focus-visible:ring-dpb-accent ${
             !proxyPortValid ? 'border-destructive' : ''
           }`}
         />
@@ -92,8 +93,8 @@ export function StepInfo({ state, onChange, onNext }: StepInfoProps) {
                 }}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors capitalize ${
                   isSelected
-                    ? 'bg-[#32313f] border-[#6264a7] text-[#9ea4f0]'
-                    : 'bg-[#252432] border-[#3a3948] text-muted-foreground hover:text-foreground'
+                    ? 'bg-dpb-raised border-dpb-border-focus text-dpb-accent-muted'
+                    : 'bg-dpb-surface border-dpb-border text-muted-foreground hover:text-foreground'
                 } ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}
               >
                 {env}
@@ -109,7 +110,7 @@ export function StepInfo({ state, onChange, onNext }: StepInfoProps) {
           onClick={onNext}
           disabled={!canAdvance}
           className="px-6 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-          style={{ background: canAdvance ? 'linear-gradient(135deg, #6264a7, #7b83eb)' : undefined }}
+          style={{ background: canAdvance ? GRADIENT : undefined }}
         >
           Next: Services →
         </button>

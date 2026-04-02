@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { View } from './app-shell'
+import { GRADIENT } from '@/lib/theme'
 
 interface TestResult { url: string; success: boolean; response?: string; error?: string }
 interface TestSummary { total: number; passed: number; failed: number }
@@ -96,14 +97,14 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
       </div>
 
       {/* Config */}
-      <div className="bg-[#252432] border border-[#3a3948] rounded-lg p-5 space-y-5">
+      <div className="bg-dpb-surface border border-dpb-border rounded-lg p-5 space-y-5">
         <div className="space-y-2">
           <Label htmlFor="testName">Project Name</Label>
           <Input
             id="testName"
             value={projectName}
             onChange={(e) => setProjectName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-            className="w-64 bg-[#1c1b24] border-[#3a3948] focus-visible:ring-[#6264a7]"
+            className="w-64 bg-dpb-bg border-dpb-border focus-visible:ring-dpb-accent"
           />
           <p className="text-xs text-muted-foreground">Created as {projectName}-output (auto-gitignored)</p>
         </div>
@@ -119,11 +120,11 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
                   onClick={() => toggleService(s.name)}
                   className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
                     isSelected
-                      ? 'bg-[#32313f] border-[#6264a7]'
-                      : 'bg-[#1c1b24] border-[#3a3948] hover:border-[#44435a]'
+                      ? 'bg-dpb-raised border-dpb-border-focus'
+                      : 'bg-dpb-bg border-dpb-border hover:border-dpb-dot-inactive'
                   }`}
                 >
-                  <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${isSelected ? 'bg-[#7b83eb]' : 'bg-[#44435a]'}`} />
+                  <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${isSelected ? 'bg-dpb-dot-active' : 'bg-dpb-dot-inactive'}`} />
                   <div>
                     <p className={`text-sm font-semibold ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}>
                       {s.label}
@@ -144,13 +145,13 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
                 <div key={step} className="flex items-center gap-2">
                   <div
                     className={`w-2 h-2 rounded-full ${
-                      i < progressStep ? 'bg-[#6264a7]' : i === progressStep ? 'bg-[#7b83eb] animate-pulse' : 'bg-[#3a3948]'
+                      i < progressStep ? 'bg-dpb-accent' : i === progressStep ? 'bg-dpb-dot-active animate-pulse' : 'bg-dpb-border'
                     }`}
                   />
-                  <span className={`text-xs ${i === progressStep ? 'text-[#9ea4f0] font-semibold' : 'text-muted-foreground'}`}>
+                  <span className={`text-xs ${i === progressStep ? 'text-dpb-accent-muted font-semibold' : 'text-muted-foreground'}`}>
                     {step}
                   </span>
-                  {i < PROGRESS_STEPS.length - 1 && <span className="text-[#3a3948]">&#8594;</span>}
+                  {i < PROGRESS_STEPS.length - 1 && <span className="text-dpb-border">&#8594;</span>}
                 </div>
               ))}
             </div>
@@ -164,7 +165,7 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
             onClick={runTest}
             disabled={selected.length === 0}
             className="w-full py-2.5 rounded-md text-sm font-bold text-white disabled:opacity-40"
-            style={{ background: 'linear-gradient(135deg, #6264a7, #7b83eb)' }}
+            style={{ background: GRADIENT }}
           >
             Run Test
           </button>
@@ -202,7 +203,7 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
               {results.map((r, i) => (
                 <div
                   key={i}
-                  className={`flex items-center justify-between p-3 rounded-md border-l-2 bg-[#252432] border border-[#3a3948] text-sm ${
+                  className={`flex items-center justify-between p-3 rounded-md border-l-2 bg-dpb-surface border border-dpb-border text-sm ${
                     r.success ? 'border-l-green-500' : 'border-l-red-500'
                   }`}
                 >
@@ -224,7 +225,7 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
 
       {/* Logs — collapsed by default */}
       {logs && (
-        <div className="bg-[#252432] border border-[#3a3948] rounded-lg overflow-hidden">
+        <div className="bg-dpb-surface border border-dpb-border rounded-lg overflow-hidden">
           <button
             onClick={() => setShowLogs((v) => !v)}
             className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -236,12 +237,12 @@ export function TestRunner({ onNavigate }: TestRunnerProps) {
             <div className="relative">
               <button
                 onClick={copyLogs}
-                className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-xs border border-[#3a3948] rounded bg-[#1c1b24] text-muted-foreground hover:text-foreground"
+                className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-xs border border-dpb-border rounded bg-dpb-bg text-muted-foreground hover:text-foreground"
               >
                 <Copy className="w-3 h-3" />
                 Copy
               </button>
-              <pre className="p-4 bg-[#141318] text-gray-300 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto border-t border-[#3a3948]">
+              <pre className="p-4 bg-dpb-overlay text-gray-300 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto border-t border-dpb-border">
                 {logs}
               </pre>
             </div>

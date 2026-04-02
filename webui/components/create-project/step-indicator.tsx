@@ -20,17 +20,17 @@ export function StepIndicator({ currentStep }: StepIndicatorProps) {
               <div
                 className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
                   isCompleted
-                    ? 'bg-[#6264a7] border-[#6264a7] text-white'
+                    ? 'bg-dpb-accent border-dpb-border-focus text-white'
                     : isCurrent
-                    ? 'border-[#6264a7] text-[#7b83eb] bg-[#32313f]'
-                    : 'border-[#3a3948] text-muted-foreground bg-[#252432]'
+                    ? 'border-dpb-border-focus text-dpb-accent-light bg-dpb-raised'
+                    : 'border-dpb-border text-muted-foreground bg-dpb-surface'
                 }`}
               >
                 {isCompleted ? <Check className="w-3.5 h-3.5" /> : step}
               </div>
               <span
                 className={`text-[10px] mt-1 font-medium whitespace-nowrap ${
-                  isCurrent ? 'text-[#7b83eb]' : isCompleted ? 'text-foreground' : 'text-muted-foreground'
+                  isCurrent ? 'text-dpb-accent-light' : isCompleted ? 'text-foreground' : 'text-muted-foreground'
                 }`}
               >
                 {label}
@@ -39,7 +39,7 @@ export function StepIndicator({ currentStep }: StepIndicatorProps) {
             {i < STEPS.length - 1 && (
               <div
                 className={`flex-1 h-px mx-3 mb-3 transition-colors ${
-                  step < currentStep ? 'bg-[#6264a7]' : 'bg-[#3a3948]'
+                  step < currentStep ? 'bg-dpb-accent' : 'bg-dpb-border'
                 }`}
               />
             )}

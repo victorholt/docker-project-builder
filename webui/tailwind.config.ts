@@ -51,6 +51,33 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // ── DPBuilder theme palette ───────────────────────────────────
+        // Edit these to retheme the entire app. All components reference
+        // these names — no hex hunting required.
+        dpb: {
+          // Backgrounds
+          bg:        '#1c1b24', // deepest background (inputs, terminal)
+          surface:   '#252432', // card / panel surfaces
+          raised:    '#32313f', // selected/active item background
+          overlay:   '#141318', // terminal / code blocks
+
+          // Borders
+          border:    '#3a3948', // default border
+          'border-focus': '#6264a7', // focused / active border
+
+          // Accent — primary purple (Teams #6264a7)
+          accent:    '#6264a7',
+          'accent-light': '#7b83eb', // lighter purple for icons/text
+          'accent-muted': '#9ea4f0', // very light for subtle text
+
+          // Gradient endpoints (used as inline style — see theme.ts)
+          'grad-from': '#6264a7',
+          'grad-to':   '#7b83eb',
+
+          // Dot indicators
+          'dot-active':   '#7b83eb',
+          'dot-inactive': '#44435a',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
