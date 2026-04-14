@@ -2,8 +2,14 @@
 const nextConfig = {
   output: 'standalone',
   env: {
-    API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000',
+    // Empty default -> same-origin `/api/*` fetches through the HTTPS proxy.
+    API_URL: process.env.NEXT_PUBLIC_API_URL ?? '',
   },
+  // Origins allowed to hit the dev server (Next.js 15+ cross-origin dev warning).
+  // Without this, requests coming through the reverse proxy on the configured
+  // HTTPS domains get rejected in development. One entry per selected
+  // environment's domain, plus the proxy port and SSL port variants.
+  allowedDevOrigins: {{{allowedDevOriginsJson}}},
 }
 
 module.exports = nextConfig

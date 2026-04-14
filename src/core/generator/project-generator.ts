@@ -2,6 +2,7 @@ import type { IFileWriter } from '../interfaces/file-writer.js';
 import type { ITemplateRenderer } from '../interfaces/template-renderer.js';
 import type { IServicePlugin } from '../interfaces/service-plugin.js';
 import type { ProjectConfig } from '../models/project-config.js';
+import { getPrimaryDomain } from '../models/project-config.js';
 import { StructureBuilder } from './structure-builder.js';
 import { TemplatesBuilder } from './templates-builder.js';
 import { DockerfileBuilder } from './dockerfile-builder.js';
@@ -108,6 +109,10 @@ export class ProjectGenerator {
    * Generates project README
    */
   private async generateReadme(config: ProjectConfig): Promise<void> {
+    // README "Access URLs" section uses the local domain for dev quick-start.
+    // Falls back to the primary domain if local isn't configured.
+    const readmeDomain = config.domains.local ?? getPrimaryDomain(config) ?? '';
+
     const content = `# ${config.projectName}
 
 Docker-based project with multi-service architecture.
@@ -174,10 +179,10 @@ ${config.projectName}/
 
 ## 🌐 Access URLs
 
-- Main: http://${config.domain}:${config.proxy.port}
+- Main: http://${readmeDomain}:${config.proxy.port}
 ${config.services
   .filter((s) => s.category === 'app')
-  .map((s) => `- ${s.name}: http://${config.domain}:${config.proxy.port}/${s.name}`)
+  .map((s) => `- ${s.name}: http://${readmeDomain}:${config.proxy.port}/${s.name}`)
   .join('\n')}
 
 ## 🔧 Configuration

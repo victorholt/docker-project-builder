@@ -38,8 +38,12 @@ export class TemplatesBuilder {
           continue;
         }
 
+        // Build a per-plugin render context: base config plus any extra
+        // computed values that specific plugins need in their templates.
+        const context = this.buildRenderContext(plugin.name, config);
+
         // Copy and render all template files
-        await this.copyTemplateDirectory(pluginTemplatesDir, targetDir, config);
+        await this.copyTemplateDirectory(pluginTemplatesDir, targetDir, context);
         console.log(`  ✓ Generated starter code for ${plugin.name}`);
       } catch (error) {
         console.warn(`  ⚠ Failed to copy templates for ${plugin.name}:`, error);
@@ -48,12 +52,47 @@ export class TemplatesBuilder {
   }
 
   /**
+   * Returns the template render context for a given plugin. Starts from the
+   * raw project config and layers plugin-specific computed values on top —
+   * Handlebars can't easily do array composition, so we prepare anything
+   * array-shaped here in TypeScript.
+   */
+  private buildRenderContext(
+    pluginName: string,
+    config: ProjectConfig
+  ): Record<string, unknown> {
+    const base: Record<string, unknown> = { ...config };
+
+    if (pluginName === 'nextjs') {
+      // allowedDevOrigins: every selected env's domain, plus the :proxy.port
+      // and :proxy.sslPort variants of each. Emitted as a JSON array literal
+      // via triple-stash {{{allowedDevOriginsJson}}} in the template.
+      const domains = [
+        config.domains.local,
+        config.domains.staging,
+        config.domains.prod,
+      ].filter((d): d is string => typeof d === 'string' && d.length > 0);
+
+      const origins: string[] = [];
+      for (const d of domains) {
+        origins.push(d);
+        origins.push(`${d}:${config.proxy.port}`);
+        origins.push(`${d}:${config.proxy.sslPort}`);
+      }
+      base.allowedDevOrigins = origins;
+      base.allowedDevOriginsJson = JSON.stringify(origins);
+    }
+
+    return base;
+  }
+
+  /**
    * Recursively copies a directory of templates
    */
   private async copyTemplateDirectory(
     sourceDir: string,
     targetDir: string,
-    config: ProjectConfig
+    context: Record<string, unknown>
   ): Promise<void> {
     const files = await this.fileWriter.listFiles(sourceDir, true);
 
@@ -73,7 +112,7 @@ export class TemplatesBuilder {
 
       // If it's a .hbs file, render it with Handlebars
       if (sourceFile.endsWith('.hbs')) {
-        const rendered = this.templateRenderer.render(content, config);
+        const rendered = this.templateRenderer.render(content, context);
         await this.fileWriter.writeFile(targetFile, rendered);
       } else {
         // Copy as-is for non-template files

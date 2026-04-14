@@ -190,7 +190,16 @@ export interface IServicePlugin {
 export interface ProjectConfig {
   projectName: string;
   containerPrefix: string;
-  domain: string;
+  /**
+   * Per-environment domain map. The user is prompted for one domain per
+   * selected environment; each key here is present iff the corresponding env
+   * is listed in `environments`.
+   */
+  domains: {
+    local?: string;
+    staging?: string;
+    prod?: string;
+  };
   services: ServiceConfig[];
   environments: Environment[];
   proxy: ProxyConfig;

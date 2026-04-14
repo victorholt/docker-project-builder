@@ -44,7 +44,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://{{domain}}:{{ports.api}}'
+  // Empty string -> same-origin `/api/*` fetches that flow through the
+  // HTTPS reverse proxy (no CORS, trusted TLS cert, matches prod topology).
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
 
   const fetchData = async () => {
     setIsRefreshing(true)

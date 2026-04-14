@@ -49,7 +49,8 @@ export async function POST(request: Request) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         projectName,
-        domain: `${projectName}.local`,
+        // One domain per selected environment — see core/models/project-config.ts.
+        domains: { local: `${projectName}.test` },
         services,
         environments: ['local'],
       }),

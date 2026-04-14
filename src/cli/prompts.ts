@@ -39,18 +39,6 @@ export async function collectProjectConfig(registry: PluginRegistry): Promise<Pr
         return true;
       },
     },
-    {
-      type: 'input',
-      name: 'domain',
-      message: 'Domain for local development:',
-      default: (answers: { projectName: string }) => `${answers.projectName}.test`,
-      validate: (input: string) => {
-        if (!/^[a-z0-9.-]+$/.test(input)) {
-          return 'Domain must be a valid domain name';
-        }
-        return true;
-      },
-    },
   ]);
 
   // Step 2: Select app frameworks
@@ -145,6 +133,44 @@ export async function collectProjectConfig(registry: PluginRegistry): Promise<Pr
         }
         return true;
       },
+    },
+  ]);
+
+  // Step 6b: Ask for a domain per selected environment, in fixed order.
+  // `when:` hooks skip the prompt for any env the user didn't pick, so we
+  // only ask the minimum set. Defaults are derived from projectName.
+  const selectedEnvs: string[] = environments.environments;
+  const domainValidator = (input: string): true | string => {
+    if (!/^[a-z0-9.-]+$/.test(input)) {
+      return 'Domain must be a valid domain name (lowercase, digits, dots, hyphens)';
+    }
+    return true;
+  };
+
+  const domainAnswers = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'local',
+      message: 'Domain for LOCAL:',
+      default: `${basicInfo.projectName}.test`,
+      when: () => selectedEnvs.includes('local'),
+      validate: domainValidator,
+    },
+    {
+      type: 'input',
+      name: 'staging',
+      message: 'Domain for STAGING:',
+      default: `staging-${basicInfo.projectName}.com`,
+      when: () => selectedEnvs.includes('staging'),
+      validate: domainValidator,
+    },
+    {
+      type: 'input',
+      name: 'prod',
+      message: 'Domain for PRODUCTION:',
+      default: `${basicInfo.projectName}.com`,
+      when: () => selectedEnvs.includes('prod'),
+      validate: domainValidator,
     },
   ]);
 
@@ -255,10 +281,21 @@ export async function collectProjectConfig(registry: PluginRegistry): Promise<Pr
   }
 
   // Build final config
+  const domains: ProjectConfig['domains'] = {};
+  if (typeof domainAnswers.local === 'string' && domainAnswers.local.length > 0) {
+    domains.local = domainAnswers.local;
+  }
+  if (typeof domainAnswers.staging === 'string' && domainAnswers.staging.length > 0) {
+    domains.staging = domainAnswers.staging;
+  }
+  if (typeof domainAnswers.prod === 'string' && domainAnswers.prod.length > 0) {
+    domains.prod = domainAnswers.prod;
+  }
+
   const config: ProjectConfig = {
     projectName: basicInfo.projectName,
     containerPrefix: basicInfo.containerPrefix,
-    domain: basicInfo.domain,
+    domains,
     services,
     environments: environments.environments,
     proxy: {
@@ -273,7 +310,11 @@ export async function collectProjectConfig(registry: PluginRegistry): Promise<Pr
   // Show summary
   console.log('\n📋 Configuration Summary:');
   console.log(`  Project: ${config.projectName}`);
-  console.log(`  Domain: ${config.domain}`);
+  const domainSummary = (Object.entries(config.domains) as [string, string | undefined][])
+    .filter(([, v]) => v)
+    .map(([env, v]) => `${env}=${v}`)
+    .join(', ');
+  console.log(`  Domains: ${domainSummary}`);
   console.log(`  Services: ${config.services.map((s) => s.name).join(', ')}`);
   console.log(`  Environments: ${config.environments.join(', ')}`);
   console.log(`  Output: ${config.outputPath}\n`);

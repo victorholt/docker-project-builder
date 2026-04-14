@@ -25,7 +25,10 @@ async function testCliCreate() {
     const config: ProjectConfig = {
       projectName: 'my-awesome-app',
       containerPrefix: 'awesome',
-      domain: 'awesome.test',
+      domains: {
+        local: 'awesome.test',
+        prod: 'awesome.com',
+      },
       services: [
         { name: 'nextjs', version: '20-alpine', category: 'app' },
         { name: 'api', version: '20-alpine', category: 'app' },
@@ -37,6 +40,7 @@ async function testCliCreate() {
         sslPort: 8443,
         vhostMode: 'path',
       },
+      ports: {},
       outputPath: './test-cli-output',
     };
 

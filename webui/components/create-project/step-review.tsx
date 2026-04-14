@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Loader2, CheckCircle2 } from 'lucide-react'
-import { WizardState } from './types'
+import { WizardState, defaultDomainFor } from './types'
 import { DEFAULT_PORTS } from './constants'
 import { GRADIENT } from '@/lib/theme'
 
@@ -60,10 +60,6 @@ export function StepReview({ state, onBack, onGenerate }: StepReviewProps) {
             <p className="font-semibold text-foreground">{state.projectName}</p>
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Domain</p>
-            <p className="font-semibold text-foreground">{state.domain || `${state.projectName}.local`}</p>
-          </div>
-          <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Proxy Port</p>
             <p className="font-semibold text-foreground">{state.proxyPort}</p>
           </div>
@@ -79,6 +75,21 @@ export function StepReview({ state, onBack, onGenerate }: StepReviewProps) {
                 </span>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Per-env Domains */}
+        <div>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Domains</p>
+          <div className="space-y-1">
+            {state.environments.map((env) => (
+              <div key={env} className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground text-xs capitalize">{env}</span>
+                <span className="text-foreground font-medium">
+                  {state.domains[env] || defaultDomainFor(env, state.projectName)}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 

@@ -2,17 +2,40 @@ import { NextResponse } from 'next/server'
 import path from 'path'
 import fs from 'fs/promises'
 
+type Environment = 'local' | 'staging' | 'prod'
+
+interface DomainsConfig {
+  local?: string
+  staging?: string
+  prod?: string
+}
+
 interface GenerateRequest {
   projectName: string
-  domain?: string
+  /** One domain per selected environment — matches core ProjectConfig.domains. */
+  domains?: DomainsConfig
   services: string[]
-  environments: string[]
+  environments: Environment[]
+}
+
+/** Shared with core/models/project-config.ts DOMAIN_REGEX. */
+const DOMAIN_REGEX = /^[a-z0-9.-]+$/
+
+function defaultDomainFor(env: Environment, projectName: string): string {
+  switch (env) {
+    case 'local':
+      return `${projectName}.test`
+    case 'staging':
+      return `staging-${projectName}.com`
+    case 'prod':
+      return `${projectName}.com`
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const body: GenerateRequest = await request.json()
-    const { projectName, domain, services, environments } = body
+    const { projectName, domains = {}, services, environments = ['local'] } = body
 
     // Validate input
     if (!projectName || !/^[a-z0-9-]+$/.test(projectName)) {
@@ -48,9 +71,33 @@ export async function POST(request: Request) {
     const { promisify } = await import('util')
     const execAsync = promisify(exec)
 
+    // Resolve per-env domains, mirroring the CLI superRefine behaviour.
+    const resolvedDomains: DomainsConfig = {}
+    const domainErrors: string[] = []
+    for (const env of environments) {
+      const value = (domains[env] ?? defaultDomainFor(env, projectName)).trim()
+      if (!value) {
+        domainErrors.push(`Domain for '${env}' is required`)
+        continue
+      }
+      if (!DOMAIN_REGEX.test(value)) {
+        domainErrors.push(`Domain for '${env}' is not a valid domain name`)
+        continue
+      }
+      resolvedDomains[env] = value
+    }
+    if (domainErrors.length > 0) {
+      return NextResponse.json(
+        { error: 'Invalid domains', details: domainErrors.join('; ') },
+        { status: 400 }
+      )
+    }
+
     const scriptPath = path.join(process.cwd(), 'generate-project.mjs')
     const servicesArg = services.join(',')
-    const command = `node ${scriptPath} ${projectName} ${servicesArg}`
+    const envArg = environments.join(',')
+    const domainsArg = JSON.stringify(resolvedDomains)
+    const command = `node ${scriptPath} ${projectName} ${servicesArg} '${domainsArg}' ${envArg}`
 
     console.log(`Executing: ${command}`)
     const { stdout, stderr } = await execAsync(command, {

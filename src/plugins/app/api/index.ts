@@ -48,13 +48,20 @@ export class ExpressjsPlugin implements IServicePlugin {
   }
 
   getComposeOverride(config: ProjectConfig): ComposeServiceBlock | null {
+    // NOTE: The API is intentionally NOT exposed on a host port by default.
+    // It is only reachable through the HTTPS reverse proxy (recommended)
+    // which gives you a trusted TLS cert and same-origin cookies in dev.
+    //
+    // If you truly need the API on localhost (e.g. running a native client
+    // outside Docker), add a `ports` entry back here, for example:
+    //     ports: [`\${API_EXTERNAL_PORT:-${(config as any).ports?.api || 4000}}:4000`]
+    // and set API_EXTERNAL_PORT in .env.
     return {
       serviceName: this.name,
       volumes: [
         '../../apps/api:/app',
         '/app/node_modules',
       ],
-      ports: [`\${API_EXTERNAL_PORT:-${(config as any).ports?.api || 4000}}:4000`],
       command: 'npm run dev',
     };
   }

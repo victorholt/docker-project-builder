@@ -2,6 +2,7 @@ import type { IFileWriter } from '../interfaces/file-writer.js';
 import type { ITemplateRenderer } from '../interfaces/template-renderer.js';
 import type { IServicePlugin, ProxyRoute } from '../interfaces/service-plugin.js';
 import type { ProjectConfig } from '../models/project-config.js';
+import { getPrimaryDomain } from '../models/project-config.js';
 import { join } from 'path';
 
 /**
@@ -44,15 +45,28 @@ export class ProxyBuilder {
     config: ProjectConfig,
     routes: ProxyRoute[]
   ): Promise<void> {
-    // Base vhosts (path-based routing)
-    await this.buildPathBasedVhosts(proxyDir, config, routes, 'httpd-vhosts.conf');
+    // Local domain is used for the hardcoded local-dev vhosts (path-based
+    // and subdomain-dev). Fall back to the primary domain if for some reason
+    // local isn't configured (e.g. a staging-only project still wants the
+    // hardcoded configs generated for reference).
+    const localDomain = config.domains.local ?? getPrimaryDomain(config) ?? '';
+    const stagingDomain = config.domains.staging ?? localDomain;
+    const prodDomain = config.domains.prod ?? localDomain;
 
-    // Dev vhosts (subdomain routing for .test domain)
-    await this.buildSubdomainVhosts(proxyDir, config, routes, 'httpd-vhosts-dev.conf');
+    // Base vhosts (path-based routing) — local dev only
+    await this.buildPathBasedVhosts(proxyDir, config, routes, 'httpd-vhosts.conf', localDomain);
+
+    // Dev vhosts (subdomain routing for local .test domain)
+    await this.buildSubdomainVhosts(proxyDir, config, routes, 'httpd-vhosts-dev.conf', localDomain);
+
+    // Staging vhosts (subdomain routing for staging domain)
+    if (config.environments.includes('staging')) {
+      await this.buildSubdomainVhosts(proxyDir, config, routes, 'httpd-vhosts-staging.conf', stagingDomain);
+    }
 
     // Prod vhosts (subdomain routing for production domain)
     if (config.environments.includes('prod')) {
-      await this.buildSubdomainVhosts(proxyDir, config, routes, 'httpd-vhosts-prod.conf', true);
+      await this.buildSubdomainVhosts(proxyDir, config, routes, 'httpd-vhosts-prod.conf', prodDomain);
     }
   }
 
@@ -63,12 +77,13 @@ export class ProxyBuilder {
     proxyDir: string,
     config: ProjectConfig,
     routes: ProxyRoute[],
-    fileName: string
+    fileName: string,
+    vhostDomain: string
   ): Promise<void> {
     const lines: string[] = [
       '<VirtualHost *:80>',
-      `    ServerName ${config.domain}`,
-      `    ServerAdmin admin@${config.domain}`,
+      `    ServerName ${vhostDomain}`,
+      `    ServerAdmin admin@${vhostDomain}`,
       '',
       '    # Error and access logs (Docker-friendly: stdout/stderr)',
       '    ErrorLog /proc/self/fd/2',
@@ -83,10 +98,10 @@ export class ProxyBuilder {
       '    </Directory>',
       '',
       '    # Redirect to HTTPS when certificates are present',
-      `    <IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">`,
+      `    <IfFile "/usr/local/apache2/conf/ssl/${vhostDomain}.crt">`,
       '        RewriteEngine On',
       '        RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/',
-      '        RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]',
+      `        RewriteRule ^(.*)$ https://%{SERVER_NAME}:${config.proxy.sslPort}%{REQUEST_URI} [R=301,L]`,
       '    </IfFile>',
       '',
     ];
@@ -98,6 +113,18 @@ export class ProxyBuilder {
     lines.push('    # Exclude ACME challenges from proxy');
     lines.push('    ProxyPass /.well-known/ !');
     lines.push('');
+
+    // If any route points at nextjs, insert HMR WebSocket upgrade handler
+    // BEFORE the catch-all ProxyPass for /
+    const hasNextjs = sortedRoutes.some((r) => r.serviceName === 'nextjs');
+    if (hasNextjs) {
+      lines.push('    # Next.js HMR WebSocket (Turbopack / webpack-hmr). Must come before the');
+      lines.push('    # catch-all ProxyPass for / so the WS upgrade is forwarded correctly.');
+      lines.push('    RewriteEngine On');
+      lines.push('    RewriteCond %{HTTP:Upgrade} =websocket [NC]');
+      lines.push('    RewriteRule ^/_next/(webpack-hmr|turbopack-hmr)(.*)$ ws://nextjs:3000/_next/$1$2 [P,L]');
+      lines.push('');
+    }
 
     // Add ProxyPass rules for each route (used when no SSL certs exist)
     for (const route of sortedRoutes) {
@@ -115,14 +142,14 @@ export class ProxyBuilder {
 
     // Add SSL VirtualHost (activated when certs exist)
     lines.push(`# SSL VirtualHost (activated when certificates are generated via ./cli certs)`);
-    lines.push(`<IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">`);
+    lines.push(`<IfFile "/usr/local/apache2/conf/ssl/${vhostDomain}.crt">`);
     lines.push('<VirtualHost *:443>');
-    lines.push(`    ServerName ${config.domain}`);
-    lines.push(`    ServerAdmin admin@${config.domain}`);
+    lines.push(`    ServerName ${vhostDomain}`);
+    lines.push(`    ServerAdmin admin@${vhostDomain}`);
     lines.push('');
     lines.push('    SSLEngine on');
-    lines.push(`    SSLCertificateFile /usr/local/apache2/conf/ssl/${config.domain}.crt`);
-    lines.push(`    SSLCertificateKeyFile /usr/local/apache2/conf/ssl/${config.domain}.key`);
+    lines.push(`    SSLCertificateFile /usr/local/apache2/conf/ssl/${vhostDomain}.crt`);
+    lines.push(`    SSLCertificateKeyFile /usr/local/apache2/conf/ssl/${vhostDomain}.key`);
     lines.push('    SSLCACertificateFile /usr/local/apache2/conf/ssl/ca.crt');
     lines.push('');
     lines.push('    # Error and access logs (Docker-friendly: stdout/stderr)');
@@ -132,6 +159,15 @@ export class ProxyBuilder {
     lines.push('    # Exclude ACME challenges from proxy');
     lines.push('    ProxyPass /.well-known/ !');
     lines.push('');
+
+    if (hasNextjs) {
+      lines.push('    # Next.js HMR WebSocket (Turbopack / webpack-hmr). Must come before the');
+      lines.push('    # catch-all ProxyPass for / so the WS upgrade is forwarded correctly.');
+      lines.push('    RewriteEngine On');
+      lines.push('    RewriteCond %{HTTP:Upgrade} =websocket [NC]');
+      lines.push('    RewriteRule ^/_next/(webpack-hmr|turbopack-hmr)(.*)$ ws://nextjs:3000/_next/$1$2 [P,L]');
+      lines.push('');
+    }
 
     for (const route of sortedRoutes) {
       if (route.path) {
@@ -159,19 +195,19 @@ export class ProxyBuilder {
     config: ProjectConfig,
     routes: ProxyRoute[],
     fileName: string,
-    isProd: boolean = false
+    vhostDomain: string
   ): Promise<void> {
     const lines: string[] = [];
 
     // Create a VirtualHost for each route with subdomain
     for (const route of routes) {
       if (route.subdomain) {
-        const serverName = `${route.subdomain}.${config.domain}`;
+        const serverName = `${route.subdomain}.${vhostDomain}`;
 
         // HTTP VirtualHost
         lines.push('<VirtualHost *:80>');
         lines.push(`    ServerName ${serverName}`);
-        lines.push(`    ServerAdmin admin@${config.domain}`);
+        lines.push(`    ServerAdmin admin@${vhostDomain}`);
         lines.push('');
         lines.push('    # Error and access logs (Docker-friendly: stdout/stderr)');
         lines.push('    ErrorLog /proc/self/fd/2');
@@ -186,10 +222,10 @@ export class ProxyBuilder {
         lines.push('    </Directory>');
         lines.push('');
         lines.push('    # Redirect to HTTPS when certificates are present');
-        lines.push(`    <IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">`);
+        lines.push(`    <IfFile "/usr/local/apache2/conf/ssl/${vhostDomain}.crt">`);
         lines.push('        RewriteEngine On');
         lines.push('        RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/');
-        lines.push('        RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]');
+        lines.push(`        RewriteRule ^(.*)$ https://%{SERVER_NAME}:${config.proxy.sslPort}%{REQUEST_URI} [R=301,L]`);
         lines.push('    </IfFile>');
         lines.push('');
         lines.push(`    # Proxy to ${route.serviceName}`);
@@ -200,14 +236,14 @@ export class ProxyBuilder {
         lines.push('');
 
         // SSL VirtualHost (activated when certs exist)
-        lines.push(`<IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">`);
+        lines.push(`<IfFile "/usr/local/apache2/conf/ssl/${vhostDomain}.crt">`);
         lines.push('<VirtualHost *:443>');
         lines.push(`    ServerName ${serverName}`);
-        lines.push(`    ServerAdmin admin@${config.domain}`);
+        lines.push(`    ServerAdmin admin@${vhostDomain}`);
         lines.push('');
         lines.push('    SSLEngine on');
-        lines.push(`    SSLCertificateFile /usr/local/apache2/conf/ssl/${config.domain}.crt`);
-        lines.push(`    SSLCertificateKeyFile /usr/local/apache2/conf/ssl/${config.domain}.key`);
+        lines.push(`    SSLCertificateFile /usr/local/apache2/conf/ssl/${vhostDomain}.crt`);
+        lines.push(`    SSLCertificateKeyFile /usr/local/apache2/conf/ssl/${vhostDomain}.key`);
         lines.push('    SSLCACertificateFile /usr/local/apache2/conf/ssl/ca.crt');
         lines.push('');
         lines.push('    # Error and access logs (Docker-friendly: stdout/stderr)');
@@ -233,13 +269,19 @@ export class ProxyBuilder {
 
   /**
    * Builds main Apache configuration (httpd.conf)
+   *
+   * This file is hardcoded for local development (volume-mounted into the
+   * proxy container). Prod/staging use the `.template` variant with ${DOMAIN}
+   * substituted from the environment file at container startup.
    */
   private async buildApacheMainConfig(proxyDir: string, config: ProjectConfig): Promise<void> {
+    const mainDomain = config.domains.local ?? getPrimaryDomain(config) ?? '';
+
     const content = `# Apache HTTP Server Configuration
 # Generated by Docker Project Builder
 
 ServerRoot "/usr/local/apache2"
-ServerName ${config.domain}
+ServerName ${mainDomain}
 
 Listen 80
 Listen 443
@@ -264,6 +306,7 @@ LoadModule setenvif_module modules/mod_setenvif.so
 LoadModule version_module modules/mod_version.so
 LoadModule proxy_module modules/mod_proxy.so
 LoadModule proxy_http_module modules/mod_proxy_http.so
+LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so
 LoadModule unixd_module modules/mod_unixd.so
 LoadModule status_module modules/mod_status.so
 LoadModule autoindex_module modules/mod_autoindex.so
@@ -279,7 +322,7 @@ LoadModule socache_shmcb_module modules/mod_socache_shmcb.so
 </IfModule>
 
 # Server admin
-ServerAdmin admin@${config.domain}
+ServerAdmin admin@${mainDomain}
 
 # Document root (not used for proxying)
 DocumentRoot "/usr/local/apache2/htdocs"
@@ -317,7 +360,7 @@ ProxyPreserveHost On
 
 # SSL Configuration (enabled when certificates are present)
 <IfModule ssl_module>
-    <IfFile "/usr/local/apache2/conf/ssl/${config.domain}.crt">
+    <IfFile "/usr/local/apache2/conf/ssl/${mainDomain}.crt">
         SSLCipherSuite HIGH:MEDIUM:!MD5:!RC4:!3DES
         SSLProxyCipherSuite HIGH:MEDIUM:!MD5:!RC4:!3DES
         SSLHonorCipherOrder on
@@ -396,6 +439,16 @@ IncludeOptional conf/vhosts/*.conf
     lines.push('    ProxyPass /.well-known/ !');
     lines.push('');
 
+    const hasNextjs = sortedRoutes.some((r) => r.serviceName === 'nextjs');
+    if (hasNextjs) {
+      lines.push('    # Next.js HMR WebSocket (Turbopack / webpack-hmr). Must come before the');
+      lines.push('    # catch-all ProxyPass for / so the WS upgrade is forwarded correctly.');
+      lines.push('    RewriteEngine On');
+      lines.push('    RewriteCond %{HTTP:Upgrade} =websocket [NC]');
+      lines.push('    RewriteRule ^/_next/(webpack-hmr|turbopack-hmr)(.*)$ ws://nextjs:3000/_next/$1$2 [P,L]');
+      lines.push('');
+    }
+
     for (const route of sortedRoutes) {
       if (route.path) {
         lines.push(`    # ${route.serviceName}`);
@@ -428,6 +481,15 @@ IncludeOptional conf/vhosts/*.conf
     lines.push('    # Exclude ACME challenges from proxy');
     lines.push('    ProxyPass /.well-known/ !');
     lines.push('');
+
+    if (hasNextjs) {
+      lines.push('    # Next.js HMR WebSocket (Turbopack / webpack-hmr). Must come before the');
+      lines.push('    # catch-all ProxyPass for / so the WS upgrade is forwarded correctly.');
+      lines.push('    RewriteEngine On');
+      lines.push('    RewriteCond %{HTTP:Upgrade} =websocket [NC]');
+      lines.push('    RewriteRule ^/_next/(webpack-hmr|turbopack-hmr)(.*)$ ws://nextjs:3000/_next/$1$2 [P,L]');
+      lines.push('');
+    }
 
     for (const route of sortedRoutes) {
       if (route.path) {
@@ -562,6 +624,7 @@ LoadModule setenvif_module modules/mod_setenvif.so
 LoadModule version_module modules/mod_version.so
 LoadModule proxy_module modules/mod_proxy.so
 LoadModule proxy_http_module modules/mod_proxy_http.so
+LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so
 LoadModule unixd_module modules/mod_unixd.so
 LoadModule status_module modules/mod_status.so
 LoadModule autoindex_module modules/mod_autoindex.so

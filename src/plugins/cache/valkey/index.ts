@@ -46,7 +46,7 @@ export class ValkeyPlugin implements IServicePlugin {
   getComposeOverride(config: ProjectConfig): ComposeServiceBlock | null {
     return {
       serviceName: this.name,
-      ports: ['6380:6379'],  // Different port to avoid conflict with Redis
+      ports: ['${VALKEY_EXTERNAL_PORT:-6379}:6379'],
     };
   }
 

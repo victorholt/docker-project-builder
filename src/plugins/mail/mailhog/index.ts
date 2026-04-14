@@ -33,8 +33,8 @@ export class MailhogPlugin implements IServicePlugin {
       image: `mailhog/mailhog:${this.defaultVersion}`,
       container_name: `\${CONTAINER_PREFIX:-${config.containerPrefix}}-mailhog`,
       ports: [
-        '1025:1025',  // SMTP
-        '8025:8025',  // Web UI
+        '${MAILHOG_SMTP_PORT:-1025}:1025',  // SMTP
+        '${MAILHOG_UI_PORT:-8025}:8025',    // Web UI
       ],
       networks: ['app-network'],
       restart: 'unless-stopped',

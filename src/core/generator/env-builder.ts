@@ -1,6 +1,7 @@
 import type { IFileWriter } from '../interfaces/file-writer.js';
 import type { IServicePlugin, Environment, EnvVarBlock } from '../interfaces/service-plugin.js';
 import type { ProjectConfig } from '../models/project-config.js';
+import { getDomainFor } from '../models/project-config.js';
 import { join } from 'path';
 
 /**
@@ -81,21 +82,38 @@ export class EnvBuilder {
    * Builds the global configuration section
    */
   private buildGlobalSection(config: ProjectConfig, env: Environment): string {
+    const hasMailhog = config.services.some(
+      (s) => s.category === 'mail' && s.name === 'mailhog'
+    );
+
+    // Per-environment domain: each generated .env file gets the domain that
+    // matches its target environment. Falls back to the primary domain if the
+    // env-specific one is absent (should not happen for a validated config).
+    const envDomain = getDomainFor(config, env);
+
     const lines: string[] = [
       '# ===== Global Configuration =====',
       `APP_ENV=${env}`,
       `PROJECT_NAME=${config.projectName}`,
       `CONTAINER_PREFIX=${config.containerPrefix}`,
-      `DOMAIN=${config.domain}`,
+      `DOMAIN=${envDomain}`,
       `PROXY_PORT=${config.proxy.port}`,
       `PROXY_SSL_PORT=${config.proxy.sslPort}`,
-      '',
-      '# Docker Compose profiles (comma-separated: db,certbot,auto-renew,tools)',
-      `COMPOSE_PROFILES=${env === 'local' ? 'local' : ''}`,
-      '',
-      '# Let\'s Encrypt certificate email (required for staging/prod SSL)',
-      `CERT_EMAIL=${env === 'prod' || env === 'staging' ? 'admin@' + config.domain : ''}`,
     ];
+
+    if (hasMailhog && env === 'local') {
+      lines.push('');
+      lines.push('# MailHog host-side ports (container ports are always 1025 / 8025)');
+      lines.push('MAILHOG_SMTP_PORT=8135');
+      lines.push('MAILHOG_UI_PORT=8136');
+    }
+
+    lines.push('');
+    lines.push('# Docker Compose profiles (comma-separated: local,db,certbot,auto-renew,tools)');
+    lines.push(`COMPOSE_PROFILES=${env === 'local' ? 'local' : ''}`);
+    lines.push('');
+    lines.push("# Let's Encrypt certificate email (required for staging/prod SSL)");
+    lines.push(`CERT_EMAIL=${env === 'prod' || env === 'staging' ? 'admin@' + envDomain : ''}`);
 
     return lines.join('\n');
   }
@@ -108,8 +126,40 @@ export class EnvBuilder {
       `# ===== ${plugin.displayName} =====`,
     ];
 
+    // Keys that should be commented out by default — the services are only
+    // reachable through the HTTPS reverse proxy, so no host port binding
+    // is needed. Uncomment only if you need direct localhost access.
+    const commentedByDefault = new Set([
+      'API_EXTERNAL_PORT',
+      'NEXTJS_EXTERNAL_PORT',
+    ]);
+
+    // Keys whose default value we override with an empty string, so the
+    // browser makes same-origin requests through the proxy. The actual
+    // default routing lives in next.config.js / page.tsx.
+    const emptyByDefault = new Set(['NEXT_PUBLIC_API_URL']);
+
+    let injectedProxyNote = false;
+
     for (const [key, value] of Object.entries(envVars)) {
-      lines.push(`${key}=${value}`);
+      if (commentedByDefault.has(key)) {
+        if (!injectedProxyNote) {
+          lines.push('# App services are exposed via the HTTPS proxy only.');
+          lines.push('# Uncomment to bind the container port to a host port for direct localhost access.');
+          injectedProxyNote = true;
+        }
+        lines.push(`# ${key}=${value}`);
+      } else if (emptyByDefault.has(key)) {
+        lines.push(
+          '# Empty = same-origin fetch through the HTTPS proxy (recommended).'
+        );
+        lines.push(
+          '# Set only if the browser needs to reach the API at a different origin.'
+        );
+        lines.push(`${key}=`);
+      } else {
+        lines.push(`${key}=${value}`);
+      }
     }
 
     return lines.join('\n');

@@ -17,7 +17,10 @@ async function testGeneration() {
   const config: ProjectConfig = {
     projectName: 'test-app',
     containerPrefix: 'testapp',
-    domain: 'testapp.test',
+    domains: {
+      local: 'testapp.test',
+      prod: 'testapp.com',
+    },
     services: [
       { name: 'nextjs', version: '20-alpine', category: 'app' },
       { name: 'api', version: '20-alpine', category: 'app' },
@@ -29,12 +32,13 @@ async function testGeneration() {
       sslPort: 8443,
       vhostMode: 'path',
     },
+    ports: {},
     outputPath: './test-output',
   };
 
   console.log('📋 Test Configuration:');
   console.log(`  Project: ${config.projectName}`);
-  console.log(`  Domain: ${config.domain}`);
+  console.log(`  Domains: local=${config.domains.local}, prod=${config.domains.prod}`);
   console.log(`  Services: ${config.services.map((s) => s.name).join(', ')}`);
   console.log(`  Output: ${config.outputPath}\n`);
 

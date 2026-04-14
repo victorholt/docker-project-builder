@@ -11,13 +11,42 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Get arguments: node script.mjs projectName services [domain] [environments] [ports]
+// Get arguments: node script.mjs projectName services [domainsJSON] [environments] [ports]
+//
+// `domainsJSON` is a JSON string of the form `{"local":"x.test","staging":"..."}`
+// with one key per selected environment. For back-compat, a bare domain
+// string is still accepted and applied to all provided environments.
 const args = process.argv.slice(2);
 const projectName = args[0] || 'test-project';
 const services = args[1] ? args[1].split(',') : ['nextjs', 'api', 'postgres'];
-const domain = args[2] || `${projectName}.local`;
+const rawDomainsArg = args[2];
 const environments = args[3] ? args[3].split(',') : ['local'];
 const userPorts = args[4] ? JSON.parse(args[4]) : null;
+
+// Parse domains argument. Accept either a JSON object or (legacy) a bare
+// hostname — the bare form is broadcast to every selected env so the core
+// superRefine is satisfied.
+let domains;
+if (rawDomainsArg && rawDomainsArg.trim().startsWith('{')) {
+  try {
+    domains = JSON.parse(rawDomainsArg);
+  } catch {
+    domains = {};
+  }
+} else if (rawDomainsArg && rawDomainsArg.length > 0) {
+  domains = {};
+  for (const env of environments) {
+    domains[env] = rawDomainsArg;
+  }
+} else {
+  // No input at all — fall back to CLI-style smart defaults per env.
+  domains = {};
+  for (const env of environments) {
+    if (env === 'local') domains[env] = `${projectName}.test`;
+    else if (env === 'staging') domains[env] = `staging-${projectName}.com`;
+    else if (env === 'prod') domains[env] = `${projectName}.com`;
+  }
+}
 
 const outputPath = path.join(__dirname, '..', `${projectName}-output`);
 
@@ -70,7 +99,7 @@ try {
   const config = {
     projectName,
     containerPrefix: projectName,
-    domain,
+    domains,
     services: serviceConfigs,
     environments,
     proxy: { port: proxyPort, sslPort: proxyPort + 363, vhostMode: 'path' },

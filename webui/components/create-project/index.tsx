@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { View } from '../app-shell'
 import { GRADIENT } from '@/lib/theme'
-import { WizardState, WizardLayout, WizardStep } from './types'
+import { WizardState, WizardLayout, WizardStep, defaultDomainFor } from './types'
 import { StepIndicator } from './step-indicator'
 import { StepInfo } from './step-info'
 import { StepServices } from './step-services'
@@ -16,7 +16,8 @@ interface CreateProjectProps {
 
 const INITIAL_STATE: WizardState = {
   projectName: '',
-  domain: '',
+  domains: { local: defaultDomainFor('local', '') },
+  domainsEdited: {},
   proxyPort: 8080,
   environments: ['local'],
   selectedServices: [],
@@ -40,7 +41,13 @@ export function CreateProject({ onNavigate, layout = 'steps' }: CreateProjectPro
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         projectName: state.projectName,
-        domain: state.domain || `${state.projectName}.local`,
+        // One domain per selected env. Fall back to smart defaults for any
+        // selected env that somehow slipped through without a value — the
+        // server validates this again.
+        domains: state.environments.reduce<Record<string, string>>((acc, env) => {
+          acc[env] = state.domains[env] || defaultDomainFor(env, state.projectName)
+          return acc
+        }, {}),
         services: state.selectedServices,
         environments: state.environments,
         ports: { ...state.servicePorts, proxy: state.proxyPort },

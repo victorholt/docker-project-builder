@@ -7,12 +7,35 @@ import archiver from 'archiver'
 
 const execAsync = promisify(exec)
 
+type Environment = 'local' | 'staging' | 'prod'
+
+interface DomainsConfig {
+  local?: string
+  staging?: string
+  prod?: string
+}
+
 interface GenerateRequest {
   projectName: string
-  domain?: string
+  /** One domain per selected environment — matches core ProjectConfig.domains. */
+  domains?: DomainsConfig
   services: string[]
-  environments: string[]
+  environments: Environment[]
   ports?: Record<string, number>
+}
+
+/** Shared with core/models/project-config.ts DOMAIN_REGEX. */
+const DOMAIN_REGEX = /^[a-z0-9.-]+$/
+
+function defaultDomainFor(env: Environment, projectName: string): string {
+  switch (env) {
+    case 'local':
+      return `${projectName}.test`
+    case 'staging':
+      return `staging-${projectName}.com`
+    case 'prod':
+      return `${projectName}.com`
+  }
 }
 
 export async function POST(request: Request) {
@@ -20,7 +43,7 @@ export async function POST(request: Request) {
 
   try {
     const body: GenerateRequest = await request.json()
-    const { projectName, domain, services, environments, ports = {} } = body
+    const { projectName, domains = {}, services, environments, ports = {} } = body
 
     // Validate input
     if (!projectName || !/^[a-z0-9-]+$/.test(projectName)) {
@@ -37,15 +60,47 @@ export async function POST(request: Request) {
       )
     }
 
+    if (!environments || environments.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one environment must be selected' },
+        { status: 400 }
+      )
+    }
+
+    // Mirror the core Zod superRefine: every selected env needs a non-empty,
+    // well-formed domain. Fill in smart defaults for any missing entries, then
+    // validate the final shape.
+    const resolvedDomains: DomainsConfig = {}
+    const domainErrors: string[] = []
+    for (const env of environments) {
+      const value = (domains[env] ?? defaultDomainFor(env, projectName)).trim()
+      if (!value) {
+        domainErrors.push(`Domain for '${env}' is required`)
+        continue
+      }
+      if (!DOMAIN_REGEX.test(value)) {
+        domainErrors.push(`Domain for '${env}' is not a valid domain name`)
+        continue
+      }
+      resolvedDomains[env] = value
+    }
+    if (domainErrors.length > 0) {
+      return NextResponse.json(
+        { error: 'Invalid domains', details: domainErrors.join('; ') },
+        { status: 400 }
+      )
+    }
+
     // Use generate-project.mjs as a separate process to avoid
     // plugin discovery issues inside the Next.js runtime
     const scriptPath = path.join(process.cwd(), 'generate-project.mjs')
     const servicesArg = services.join(',')
     const envArg = environments.join(',')
     const portsArg = JSON.stringify(ports)
-    const domainArg = domain || `${projectName}.local`
+    // Pass per-env domains as a JSON string; generate-project.mjs parses it.
+    const domainsArg = JSON.stringify(resolvedDomains)
 
-    const command = `node ${scriptPath} ${projectName} ${servicesArg} ${domainArg} ${envArg} '${portsArg}'`
+    const command = `node ${scriptPath} ${projectName} ${servicesArg} '${domainsArg}' ${envArg} '${portsArg}'`
 
     console.log(`Executing: ${command}`)
     const { stdout, stderr } = await execAsync(command, {

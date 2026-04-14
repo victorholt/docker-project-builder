@@ -50,7 +50,10 @@ export class NextjsPlugin implements IServicePlugin {
       environment: {
         NODE_ENV: 'development',
         NEXT_TELEMETRY_DISABLED: '1',
-        NEXT_PUBLIC_API_URL: `\${NEXT_PUBLIC_API_URL:-http://${config.domain}:${(config as any).ports?.api || 4000}}`,
+        // Default to empty so the browser makes same-origin `/api/*`
+        // requests through the HTTPS reverse proxy. `${VAR-}` (no colon)
+        // lets an explicitly-empty value through unchanged.
+        NEXT_PUBLIC_API_URL: '${NEXT_PUBLIC_API_URL-}',
       },
       networks: ['app-network'],
       restart: 'unless-stopped',
@@ -59,14 +62,22 @@ export class NextjsPlugin implements IServicePlugin {
   }
 
   getComposeOverride(config: ProjectConfig): ComposeServiceBlock | null {
-    // Dev: Hot reload with host volume mounts
+    // Dev: Hot reload with host volume mounts.
+    //
+    // NOTE: Next.js is intentionally NOT exposed on a host port by default.
+    // It is only reachable through the HTTPS reverse proxy, which gives
+    // you a trusted TLS cert and matches the prod topology.
+    //
+    // If you truly need Next.js on localhost directly, add a `ports` entry
+    // back here, for example:
+    //     ports: [`\${NEXTJS_EXTERNAL_PORT:-${(config as any).ports?.nextjs || 3000}}:3000`]
+    // and set NEXTJS_EXTERNAL_PORT in .env.
     return {
       serviceName: this.name,
       volumes: [
         '../../apps/nextjs:/app',
         '/app/node_modules',
       ],
-      ports: [`\${NEXTJS_EXTERNAL_PORT:-${(config as any).ports?.nextjs || 3000}}:3000`],
       command: 'npm run dev',
     };
   }
@@ -162,12 +173,21 @@ exec "$@"
 
   getEnvVars(config: ProjectConfig, env: Environment): EnvVarBlock {
     const externalPort = (config as any).ports?.[this.name] || 3000;
+    // Each environment's API URL points at that environment's domain. Fall
+    // back through the domain precedence if the exact env isn't configured
+    // (e.g. generating the local .env but only prod was selected).
+    const envDomain =
+      config.domains[env] ??
+      config.domains.local ??
+      config.domains.staging ??
+      config.domains.prod ??
+      '';
     return {
       NEXTJS_PORT: 3000,
       NEXTJS_EXTERNAL_PORT: externalPort,
       NEXT_PUBLIC_API_URL: env === 'prod'
-        ? `https://api.${config.domain}`
-        : `http://${config.domain}:${(config as any).ports?.api || 4000}`,
+        ? `https://api.${envDomain}`
+        : `http://${envDomain}:${(config as any).ports?.api || 4000}`,
     };
   }
 

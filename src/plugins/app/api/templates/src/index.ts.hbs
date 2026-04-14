@@ -8,7 +8,10 @@ const app = express()
 const PORT = process.env.PORT || 4000
 
 // Middleware
-app.use(helmet())
+// HSTS is sticky in browsers — once set, the browser refuses plain HTTP
+// for that origin for `max-age` seconds. Disable it outside production so
+// local HTTP dev keeps working even after you hit the HTTPS proxy once.
+app.use(helmet({ hsts: process.env.NODE_ENV === 'production' }))
 app.use(cors({
   origin: process.env.CORS_ORIGIN || true,
   credentials: true,

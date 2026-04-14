@@ -51,7 +51,7 @@ export class PostgresPlugin implements IServicePlugin {
   getComposeOverride(config: ProjectConfig): ComposeServiceBlock | null {
     return {
       serviceName: this.name,
-      ports: ['5432:5432'],
+      ports: ['${POSTGRES_EXTERNAL_PORT:-5432}:5432'],
     };
   }
 

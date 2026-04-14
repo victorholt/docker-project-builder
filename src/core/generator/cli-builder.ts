@@ -1,7 +1,18 @@
 import type { IFileWriter } from '../interfaces/file-writer.js';
 import type { IServicePlugin, CLICommand } from '../interfaces/service-plugin.js';
 import type { ProjectConfig } from '../models/project-config.js';
+import { getPrimaryDomain } from '../models/project-config.js';
 import { join } from 'path';
+
+/**
+ * Returns the domain to bake into generated shell scripts as the default
+ * value for ${DOMAIN:-...}. The generated CLI is run interactively and
+ * typically against local first, so prefer local; otherwise fall back in
+ * precedence order via getPrimaryDomain.
+ */
+function defaultShellDomain(config: ProjectConfig): string {
+  return config.domains.local ?? getPrimaryDomain(config) ?? '';
+}
 
 /**
  * CLIBuilder generates the bash CLI tool for managing the Docker project
@@ -216,9 +227,11 @@ esac
     const portChecks: string[] = [];
     for (const service of config.services) {
       if (service.category === 'app') {
+        // App services (api, nextjs) are NOT exposed on a host port by
+        // default — only via the HTTPS proxy. Only check the port if the
+        // user has explicitly set e.g. API_EXTERNAL_PORT in .env.
         const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
-        const defaultPort = (service.config?.port as number) || 3000;
-        portChecks.push(`    check_port "\${${portVar}:-${defaultPort}}" "${service.name.toUpperCase()}" "${portVar}" || ok=false`);
+        portChecks.push(`    if [ -n "\${${portVar}:-}" ]; then check_port "\${${portVar}}" "${service.name.toUpperCase()}" "${portVar}" || ok=false; fi`);
       } else if (service.category === 'database') {
         const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
         const defaultPort = (service.config?.port as number) || 5432;
@@ -227,6 +240,9 @@ esac
         const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
         const defaultPort = (service.config?.port as number) || 6379;
         portChecks.push(`    check_port "\${${portVar}:-${defaultPort}}" "${service.name.toUpperCase()}" "${portVar}" || ok=false`);
+      } else if (service.category === 'mail' && service.name === 'mailhog') {
+        portChecks.push(`    check_port "\${MAILHOG_SMTP_PORT:-1025}" "MAILHOG_SMTP" "MAILHOG_SMTP_PORT" || ok=false`);
+        portChecks.push(`    check_port "\${MAILHOG_UI_PORT:-8025}" "MAILHOG_UI" "MAILHOG_UI_PORT" || ok=false`);
       }
     }
     // Always check proxy ports
@@ -287,6 +303,17 @@ dc() {
             fi
             ;;
     esac
+
+    # When running locally, ensure the 'local' compose profile is active so
+    # services gated behind \`profiles: [local]\` (e.g. mailhog, postgres,
+    # valkey) come up. Preserve any other profiles the user has set.
+    if [ "\${env}" = "local" ]; then
+        if [ -z "\${COMPOSE_PROFILES:-}" ]; then
+            export COMPOSE_PROFILES="local"
+        elif [[ ",\${COMPOSE_PROFILES}," != *",local,"* ]]; then
+            export COMPOSE_PROFILES="\${COMPOSE_PROFILES},local"
+        fi
+    fi
 
     local env_file=""
     if [ -f "\${PROJECT_ROOT}/.env" ]; then
@@ -1015,6 +1042,9 @@ prompt ${nameUpper}_DB "${service.name} database" "\${${nameUpper}_DB:-${config.
         const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
         const defaultPort = (service.config?.port as number) || 6379;
         portPrompts.push(`prompt ${portVar} "${service.name} external port" "\${${portVar}:-${defaultPort}}"`);
+      } else if (service.category === 'mail' && service.name === 'mailhog') {
+        portPrompts.push(`prompt MAILHOG_SMTP_PORT "MailHog SMTP port" "\${MAILHOG_SMTP_PORT:-1025}"`);
+        portPrompts.push(`prompt MAILHOG_UI_PORT "MailHog Web UI port" "\${MAILHOG_UI_PORT:-8025}"`);
       }
     }
     portPrompts.push(`prompt PROXY_PORT "Proxy HTTP port" "\${PROXY_PORT:-${config.proxy.port}}"`);
@@ -1038,6 +1068,9 @@ prompt ${nameUpper}_DB "${service.name} database" "\${${nameUpper}_DB:-${config.
         const portVar = `${service.name.toUpperCase()}_EXTERNAL_PORT`;
         const defaultPort = (service.config?.port as number) || 6379;
         portEnvLines.push(`${portVar}=\${${portVar}:-${defaultPort}}`);
+      } else if (service.category === 'mail' && service.name === 'mailhog') {
+        portEnvLines.push(`MAILHOG_SMTP_PORT=\${MAILHOG_SMTP_PORT:-1025}`);
+        portEnvLines.push(`MAILHOG_UI_PORT=\${MAILHOG_UI_PORT:-8025}`);
       }
     }
     portEnvLines.push(`PROXY_PORT=\${PROXY_PORT:-${config.proxy.port}}`);
@@ -1149,7 +1182,7 @@ echo ""
 
 # -- Environment -----------------------------------------------
 prompt APP_ENV "Environment (local/staging/prod)" "\${APP_ENV:-local}"
-prompt DOMAIN "Domain" "\${DOMAIN:-${config.domain}}"
+prompt DOMAIN "Domain" "\${DOMAIN:-${defaultShellDomain(config)}}"
 
 # -- Docker ----------------------------------------------------
 prompt CONTAINER_PREFIX "Container prefix" "\${CONTAINER_PREFIX:-${config.containerPrefix}}"
@@ -1330,7 +1363,7 @@ show_cert_help() {
     echo "  ./cli certs [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --domain=<domain>  Domain to generate cert for (default: ${config.domain})"
+    echo "  --domain=<domain>  Domain to generate cert for (default: ${defaultShellDomain(config)})"
     echo "  --days=<days>      Certificate validity in days (default: 365, local only)"
     echo "  --force            Regenerate existing certificates"
     echo "  --email=<email>    Email for Let's Encrypt registration (staging/prod)"
@@ -1342,7 +1375,7 @@ show_cert_help() {
     echo "  staging/prod       Let's Encrypt certificate via certbot"
     echo ""
     echo "Examples:"
-    echo "  ./cli certs                                   # Local: self-signed for ${config.domain}"
+    echo "  ./cli certs                                   # Local: self-signed for ${defaultShellDomain(config)}"
     echo "  ./cli certs --force                           # Regenerate certificates"
     echo "  ./cli certs --email=admin@example.com         # Staging/Prod: Let's Encrypt"
     echo "  ./cli certs --staging-le                      # Test with LE staging server"
@@ -1350,12 +1383,26 @@ show_cert_help() {
 }
 
 # ============================================================================
+# Sudo refusal guard
+# ============================================================================
+# Running the whole cert flow as root leaves ca.key / \${DOMAIN}.key owned by
+# root, which Docker Desktop's file bridge then hides from the bind mount,
+# and Apache inside the container can't read them. We only need sudo for the
+# optional Keychain step at the very end.
+if [ "\$(id -u)" = "0" ]; then
+    echo "Error: do not run './cli certs' with sudo." >&2
+    echo "Run it as your normal user; you'll be prompted for sudo only when" >&2
+    echo "adding the CA to the macOS Keychain (optional, at the end)." >&2
+    exit 1
+fi
+
+# ============================================================================
 # Parse Arguments
 # ============================================================================
 
 load_env
 
-DOMAIN="\${DOMAIN:-${config.domain}}"
+DOMAIN="\${DOMAIN:-${defaultShellDomain(config)}}"
 DAYS="365"
 FORCE=""
 EMAIL="\${CERT_EMAIL:-admin@\${DOMAIN}}"
@@ -1420,7 +1467,13 @@ generate_self_signed() {
     else
         info "Creating local Certificate Authority..."
 
+        # Remove any stale (possibly root-owned) files so --force can overwrite
+        rm -f "\${CA_KEY}" "\${CA_CERT}"
+
         openssl genrsa -out "\${CA_KEY}" 4096 2>/dev/null
+        # Key must be readable by the Apache container's daemon user, and
+        # Docker Desktop's file bridge hides 0600 files from bind mounts.
+        chmod 644 "\${CA_KEY}"
 
         openssl req -x509 -new -nodes \\
             -key "\${CA_KEY}" \\
@@ -1450,7 +1503,13 @@ generate_self_signed() {
 
     info "Generating certificate for \${DOMAIN}..."
 
+    # Remove any stale (possibly root-owned) files so --force can overwrite
+    rm -f "\${DOMAIN_KEY}" "\${DOMAIN_CERT}" "\${DOMAIN_CSR}" "\${DOMAIN_EXT}"
+
     openssl genrsa -out "\${DOMAIN_KEY}" 2048 2>/dev/null
+    # Key must be readable by the Apache container's daemon user, and
+    # Docker Desktop's file bridge hides 0600 files from bind mounts.
+    chmod 644 "\${DOMAIN_KEY}"
 
     openssl req -new \\
         -key "\${DOMAIN_KEY}" \\
@@ -1660,7 +1719,7 @@ esac
 load_env
 
 ENV="\${APP_ENV:-local}"
-DOMAIN="\${DOMAIN:-${config.domain}}"
+DOMAIN="\${DOMAIN:-${defaultShellDomain(config)}}"
 
 if [ "\${ENV}" = "local" ]; then
     info "Local environment uses self-signed certificates."
